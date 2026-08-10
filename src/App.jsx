@@ -15,6 +15,7 @@ import { isSupabaseReady } from './lib/supabase.js'
 import './styles/global.css'
 
 import ArchivedPage from './pages/ArchivedPage.jsx'
+import DebugPanel from './components/DebugPanel.jsx'
 
 const PAGES = {
   studio: StudioPage,
@@ -100,6 +101,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppShell />
+      <DebugPanel />
     </AuthProvider>
   )
 }

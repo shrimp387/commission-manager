@@ -88,6 +88,14 @@ export function initTaskFields(taskId, defaults) {
   }
 }
 
+/** Force-sets task fields — used during login seed to restore from DB/localStorage. */
+export function seedTaskFields(taskId, fields) {
+  // Merge: existing cache wins for any field already set (e.g. unsaved local changes)
+  // but incoming fields fill in any gaps (e.g. fields lost from memory after logout)
+  _cache[taskId] = { ...fields, ...(_cache[taskId] || {}) }
+  saveAll(_cache)
+}
+
 // React hook to subscribe to store
 export function useTaskStore() {
   const [data, setData] = useState({ ..._cache })

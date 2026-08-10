@@ -1,7 +1,7 @@
 {
   "major": 1,
-  "minor": 1,
-  "patch": 2,
+  "minor": 2,
+  "patch": 0,
   "history": [
     {
       "version": "v1.0.0",
@@ -26,6 +26,12 @@
       "date": "2026-08-10T01:18:50.115283",
       "message": "fix: aislar datos de localStorage por usuario al cambiar sesión",
       "bump": "patch"
+    },
+    {
+      "version": "v1.2.0",
+      "date": "2026-08-10T01:59:06.208129",
+      "message": "feat: subir attachments a Supabase Storage en vez de base64 localStorage",
+      "bump": "minor"
     }
   ]
 }

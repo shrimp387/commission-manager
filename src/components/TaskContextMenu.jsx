@@ -106,7 +106,7 @@ export default function TaskContextMenu({ task, fields, onUpdate, onDelete, onAd
             <CommentsPanel comments={fields.comments || []} onChange={c => onUpdate(task.id, 'comments', c)} />
           )}
           {sub === 'files' && (
-            <FileUploadPanel attachments={fields.attachments || []} onChange={a => onUpdate(task.id, 'attachments', a)} />
+            <FileUploadPanel attachments={fields.attachments || []} taskId={task.id} onChange={a => onUpdate(task.id, 'attachments', a)} />
           )}
           {sub === 'timer' && (
             <TimerPanel elapsed={fields.timer || 0} running={fields.timerRunning || false}

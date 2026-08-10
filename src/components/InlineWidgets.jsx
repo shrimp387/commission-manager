@@ -97,6 +97,7 @@ export default function InlineWidgets({ taskId, fields, updateField }) {
         <WidgetShell icon="📎" title="Archivos adjuntos" onRemove={() => removeWidget('files')}>
           <FileUploadPanel
             attachments={fields.attachments || []}
+            taskId={taskId}
             onChange={a => updateField(taskId, 'attachments', a)}
           />
         </WidgetShell>
