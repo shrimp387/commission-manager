@@ -11,6 +11,7 @@ import {
   promoteLocalTask,
   isLocalOnly,
 } from '../store/localTasksDb.js'
+import { saveTaskStructure, deleteTaskStructure, getAllTaskStructures } from '../lib/db.js'
 
 /**
  * Hook local-first para gestionar comisiones.
@@ -56,8 +57,26 @@ export function useTasks() {
       setRawTasks(merged)
       setSyncStatus('synced')
     } catch (err) {
+      // Taskade unavailable — fall back to Supabase task structures
+      console.warn('Taskade sync failed, trying Supabase:', err.message)
+      try {
+        const supabaseTasks = await getAllTaskStructures()
+        if (supabaseTasks.length > 0) {
+          // Merge with local-only tasks (created offline)
+          const localDb = getAllTasks()
+          const localOnlyTasks = localDb.filter(t => t.id?.startsWith('local_'))
+          const allTasks = [...supabaseTasks, ...localOnlyTasks]
+          // Sync to local store so subsequent reads are fast
+          saveSyncedTasks(allTasks)
+          const merged = applyLocalOverrides(allTasks)
+          setRawTasks(merged)
+          setSyncStatus('synced') // Supabase = online, just no Taskade
+          return
+        }
+      } catch (sbErr) {
+        console.warn('Supabase fallback also failed:', sbErr.message)
+      }
       setSyncStatus('offline')
-      console.warn('Taskade sync failed, using local data:', err.message)
     } finally {
       syncRef.current = false
       setLoading(false)
@@ -105,6 +124,9 @@ export function useTasks() {
     addLocalTask(newTask)
     setRawTasks(prev => [newTask, ...prev])
 
+    // Save structure to Supabase immediately (so it persists without Taskade)
+    await saveTaskStructure({ id: tempId, text, parentId: sectionId, localOnly: true })
+
     // Save extra fields (client, priority, stage, deadline, assignee, notes, attachments)
     if (Object.keys(extraFields).length > 0) {
       const { client = '', priority = 'ok', stage = 'new', deadline = '',
@@ -130,41 +152,35 @@ export function useTasks() {
       const realId = result?.item?.id || result?.id
       if (realId && realId !== tempId) {
         promoteLocalTask(tempId, realId)
+        // Update Supabase with the real Taskade ID
+        await saveTaskStructure({ id: realId, text, parentId: sectionId, localOnly: false })
         setRawTasks(prev => prev.map(t => t.id === tempId ? { ...t, id: realId } : t))
       }
     } catch (err) {
-      console.warn('createTask API failed (task saved locally):', err.message)
+      console.warn('createTask API failed (task saved locally + Supabase):', err.message)
     }
   }, [])
 
   // ── Eliminar tarea — LOCAL FIRST ───────────────────────────────────────────
   const removeTask = useCallback(async (taskId) => {
-    // 1. Borrar localmente de forma inmediata
     removeLocalTask(taskId)
     setRawTasks(prev => prev.filter(t => t.id !== taskId))
     setError(null)
-
-    // 2. Si es local-only (nunca se sincronizó) — no intentar API
+    // Mark deleted in Supabase
+    deleteTaskStructure(taskId)
     if (isLocalOnly(taskId) || taskId.startsWith('local_')) return
-
-    // 3. Intentar borrar en Taskade silenciosamente
-    try {
-      await deleteTask(taskId)
-    } catch (err) {
-      console.warn('deleteTask API failed (deleted locally):', err.message)
-      // No mostrar error — ya está borrado localmente
-    }
+    try { await deleteTask(taskId) }
+    catch (err) { console.warn('deleteTask API failed (deleted locally):', err.message) }
   }, [])
 
   // ── Renombrar tarea — LOCAL FIRST ──────────────────────────────────────────
   const renameTask = useCallback(async (taskId, newText) => {
     setRawTasks(prev => prev.map(t => t.id === taskId ? { ...t, text: newText } : t))
     updateLocalTask(taskId, { text: newText })
-    try {
-      await updateTask(taskId, { text: newText })
-    } catch (err) {
-      console.warn('renameTask API failed (local rename preserved):', err.message)
-    }
+    // Update text in Supabase
+    saveTaskStructure({ id: taskId, text: newText })
+    try { await updateTask(taskId, { text: newText }) }
+    catch (err) { console.warn('renameTask API failed (local rename preserved):', err.message) }
   }, [])
 
   // ── Mover tarea — LOCAL ONLY ───────────────────────────────────────────────
@@ -174,6 +190,8 @@ export function useTasks() {
     ))
     updateLocalTask(taskId, { parentId: toSectionId })
     setTaskField(taskId, 'sectionOverride', toSectionId)
+    // Persist section move in Supabase
+    saveTaskStructure({ id: taskId, parentId: toSectionId })
   }, [])
 
   // ── Reload manual ──────────────────────────────────────────────────────────

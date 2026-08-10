@@ -475,3 +475,86 @@ export async function saveKanbanConfig(config) {
   if (config.colorOverrides !== undefined) lsSet('kanban_colors', config.colorOverrides)
   if (config.labelOverrides !== undefined) lsSet('kanban_labels', config.labelOverrides)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TASK STRUCTURE (text, parentId, completed — the list itself)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Save a task's structure (text + section) to Supabase.
+ * Called whenever a task is created, renamed, or moved.
+ */
+export async function saveTaskStructure(task) {
+  if (!useSupabase()) {
+    // Fallback: update localStorage local_tasks
+    try {
+      const db = JSON.parse(localStorage.getItem('local_tasks') || '{"tasks":[]}')
+      const idx = db.tasks.findIndex(t => t.id === task.id)
+      if (idx >= 0) db.tasks[idx] = { ...db.tasks[idx], ...task }
+      else db.tasks.unshift(task)
+      localStorage.setItem('local_tasks', JSON.stringify(db))
+    } catch {}
+    return
+  }
+  try {
+    const { error } = await supabase.from('tasks').upsert({
+      id: task.id,
+      user_id: _userId,
+      text: task.text,
+      parent_id: task.parentId ?? null,
+      local_only: task.localOnly ?? false,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
+    if (error) console.error('[db] saveTaskStructure error:', error)
+  } catch (e) {
+    console.warn('[db] saveTaskStructure failed:', e?.message)
+  }
+}
+
+/**
+ * Mark a task as deleted in Supabase.
+ */
+export async function deleteTaskStructure(taskId) {
+  if (!useSupabase()) return
+  try {
+    await supabase.from('tasks')
+      .update({ deleted: true, updated_at: new Date().toISOString() })
+      .eq('id', taskId)
+      .eq('user_id', _userId)
+  } catch (e) {
+    console.warn('[db] deleteTaskStructure failed:', e?.message)
+  }
+}
+
+/**
+ * Load all non-deleted tasks from Supabase (structure only — text + parentId).
+ * Returns array of { id, text, parentId, completed, localOnly }
+ */
+export async function getAllTaskStructures() {
+  if (!useSupabase()) {
+    try {
+      const db = JSON.parse(localStorage.getItem('local_tasks') || '{"tasks":[]}')
+      return db.tasks ?? []
+    } catch { return [] }
+  }
+  try {
+    const { data } = await supabase
+      .from('tasks')
+      .select('id, text, parent_id, local_only, completed_state')
+      .eq('user_id', _userId)
+      .neq('deleted', true)
+      .not('text', 'is', null)
+    if (!data) return []
+    return data.map(t => ({
+      id: t.id,
+      text: t.text,
+      parentId: t.parent_id,
+      completed: t.completed_state ?? false,
+      localOnly: t.local_only ?? false,
+      children: [],
+    }))
+  } catch (e) {
+    console.warn('[db] getAllTaskStructures failed:', e?.message)
+    return []
+  }
+}
