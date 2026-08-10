@@ -2,19 +2,19 @@ import React, { useRef, useState } from 'react'
 import { uploadToR2, deleteFromR2, isR2Available } from '../lib/r2.js'
 import { supabase } from '../lib/supabase.js'
 import { getCurrentUserId } from '../lib/db.js'
+import { useAuth } from '../lib/AuthContext.jsx'
 
 /**
  * Uploads a file — tries R2 first, falls back to Supabase Storage, then base64.
  */
-async function uploadFile(file, taskId) {
+async function uploadFile(file, taskId, userId) {
   // Try R2 first
-  if (isR2Available()) {
-    const result = await uploadToR2(file, `attachments/${taskId}`, null)
+  if (isR2Available(userId)) {
+    const result = await uploadToR2(file, `attachments/${taskId}`, null, userId)
     if (result) return { url: result.url, storageKey: result.key, backend: 'r2' }
   }
 
   // Fallback: Supabase Storage
-  const userId = getCurrentUserId()
   if (supabase && userId) {
     const ext = file.name.split('.').pop()
     const path = `${userId}/${taskId}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`
@@ -36,13 +36,15 @@ async function uploadFile(file, taskId) {
 export default function FileUploadPanel({ attachments, onChange, taskId }) {
   const fileRef = useRef(null)
   const [uploading, setUploading] = useState(false)
+  const { user } = useAuth()
 
   async function handleFiles(files) {
+    const userId = user?.id || getCurrentUserId()
     setUploading(true)
     try {
       const newFiles = await Promise.all(
         Array.from(files).map(async file => {
-          const { url, storageKey, backend } = await uploadFile(file, taskId || 'unknown')
+          const { url, storageKey, backend } = await uploadFile(file, taskId || 'unknown', userId)
           return {
             id: Date.now() + Math.random(),
             name: file.name,

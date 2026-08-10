@@ -26,15 +26,16 @@ async function getAuthToken() {
  * @param {File|Blob} file
  * @param {string} folder — e.g. 'attachments', 'portfolio', 'backgrounds'
  * @param {string} [fileName] — optional custom filename
+ * @param {string} [userIdOverride] — optional userId if getCurrentUserId() isn't populated yet
  * @returns {{ url: string, key: string } | null}
  */
-export async function uploadToR2(file, folder, fileName = null) {
+export async function uploadToR2(file, folder, fileName = null, userIdOverride = null) {
   if (!WORKER_URL) {
     console.warn('[r2] VITE_R2_WORKER_URL not set')
     return null
   }
 
-  const userId = getCurrentUserId()
+  const userId = userIdOverride || getCurrentUserId()
   if (!userId) {
     console.warn('[r2] No user logged in')
     return null
@@ -105,7 +106,10 @@ export function getR2Url(key) {
 
 /**
  * Check if R2 is configured and available.
+ * Also accepts a userId override for cases where getCurrentUserId()
+ * hasn't been populated yet (race condition on first mount).
  */
-export function isR2Available() {
-  return !!WORKER_URL && !!getCurrentUserId()
+export function isR2Available(userIdOverride) {
+  const uid = userIdOverride || getCurrentUserId()
+  return !!WORKER_URL && !!uid
 }

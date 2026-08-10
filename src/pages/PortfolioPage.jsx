@@ -3,6 +3,7 @@ import { getPortfolio, savePortfolio } from '../lib/db.js'
 import { uploadToR2, deleteFromR2, isR2Available } from '../lib/r2.js'
 import { supabase } from '../lib/supabase.js'
 import { getCurrentUserId } from '../lib/db.js'
+import { useAuth } from '../lib/AuthContext.jsx'
 
 function PortfolioItem({ item, index, onEdit, onDelete, onOpen, onDragStart, onDragOver, onDrop }) {
   const [hover, setHover] = useState(false)
@@ -125,8 +126,9 @@ export default function PortfolioPage() {
   const [dragOver, setDragOver] = useState(false)
   const [dragIndex, setDragIndex] = useState(null)
   const fileInputRef = useRef(null)
+  const { user } = useAuth()
 
-  // Load from Supabase/localStorage on mount
+  // Load from Supabase/localStorage — re-runs when user changes (login/logout)
   useEffect(() => {
     getPortfolio().then(data => {
       if (data && data.length > 0) setItems(data)
@@ -134,7 +136,7 @@ export default function PortfolioPage() {
     }).catch(() => {
       setItems(JSON.parse(localStorage.getItem('portfolio_items') || '[]'))
     })
-  }, [])
+  }, [user?.id])
 
   async function save(updated) {
     setItems(updated)
@@ -142,14 +144,14 @@ export default function PortfolioPage() {
   }
 
   async function handleFiles(files) {
-    const userId = getCurrentUserId()
+    const userId = user?.id || getCurrentUserId()
     const newImgs = await Promise.all(
       Array.from(files)
         .filter(f => f.type.startsWith('image/'))
         .map(async file => {
           // Try R2 first
-          if (isR2Available()) {
-            const result = await uploadToR2(file, 'portfolio', null)
+          if (isR2Available(userId)) {
+            const result = await uploadToR2(file, 'portfolio', null, userId)
             if (result) return {
               id: Date.now() + Math.random(),
               url: result.url,

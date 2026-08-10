@@ -5,6 +5,7 @@
  */
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../lib/AuthContext.jsx'
+import StorageMonitor from './StorageMonitor.jsx'
 
 const TRACKED_KEYS = [
   'task_fields',
@@ -37,6 +38,7 @@ function countItems(key) {
 export default function DebugPanel() {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
+  const [showMonitor, setShowMonitor] = useState(false)
   const [snap, setSnap] = useState({})
 
   const isVisible =
@@ -123,6 +125,12 @@ export default function DebugPanel() {
               Refresh
             </button>
             <button
+              onClick={() => setShowMonitor(true)}
+              style={{ background: '#0d1f2d', color: '#38bdf8', border: '1px solid #38bdf840', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontSize: 10 }}
+            >
+              🗄 Storage Monitor
+            </button>
+            <button
               onClick={() => {
                 TRACKED_KEYS.forEach(k => localStorage.removeItem(k))
                 setSnap({})
@@ -134,6 +142,8 @@ export default function DebugPanel() {
           </div>
         </div>
       )}
+
+      {showMonitor && <StorageMonitor onClose={() => setShowMonitor(false)} />}
     </div>
   )
 }

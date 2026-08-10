@@ -171,6 +171,38 @@ export default {
       })
     }
 
+    // ── LIST FILES (for Storage Monitor) ─────────────────────────────────────
+    if (request.method === 'GET' && pathname.startsWith('/list/')) {
+      const userId = await getUserIdFromJWT(
+        request.headers.get('Authorization'),
+        env.SUPABASE_JWT_SECRET
+      )
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const requestedPrefix = pathname.slice('/list/'.length)
+      if (requestedPrefix !== userId) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const listed = await env.R2.list({ prefix: `${userId}/`, limit: 500 })
+      const objects = (listed.objects ?? []).map(obj => ({
+        key: obj.key,
+        size: obj.size,
+        uploaded: obj.uploaded?.toISOString?.() ?? obj.uploaded,
+        etag: obj.etag,
+      }))
+
+      return new Response(JSON.stringify({ ok: true, objects, truncated: listed.truncated }), {
+        status: 200, headers: { ...cors, 'Content-Type': 'application/json' }
+      })
+    }
+
     // ── HEALTH CHECK ────────────────────────────────────────────────────────
     if (pathname === '/health') {
       return new Response(JSON.stringify({ ok: true, service: 'r2-proxy' }), {
