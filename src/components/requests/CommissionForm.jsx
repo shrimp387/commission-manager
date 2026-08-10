@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { sendTelegramNotification } from '../../utils/telegram.js'
+import { saveRequest } from '../../lib/db.js'
 
 const STEP_LABELS = [
   'Información básica',
@@ -129,9 +130,8 @@ export default function CommissionForm({ onSubmit }) {
       images: form.images.map(i => ({ name: i.name, url: i.url })),
     }
 
-    // Save to localStorage
-    const existing = JSON.parse(localStorage.getItem('commission_requests') || '[]')
-    localStorage.setItem('commission_requests', JSON.stringify([request, ...existing]))
+    // Save to Supabase (primary) + localStorage (cache)
+    await saveRequest(request)
 
     // Send Telegram notification
     await sendTelegramNotification(request)

@@ -12,6 +12,7 @@ import {
   testTelegramConnection,
   getTelegramFileUrl,
 } from '../utils/telegram.js'
+import { getTelegramConfig as getTelegramConfigDb } from '../lib/db.js'
 import { getConfig, setConfig } from '../store/appConfig.js'
 
 // ─── Telegram Sticker Manager (embedded) ──────────────────────────────────────
@@ -272,11 +273,24 @@ export default function ConnectionsPage() {
   const [gmailEmail, setGmailEmail] = useState(null)
   const [showGmailTest, setShowGmailTest] = useState(false)
 
-  // Load saved Telegram config on mount
+  // Load saved Telegram config on mount — try localStorage cache first, then Supabase
   useEffect(() => {
-    const cfg = getTelegramConfig()
-    if (cfg?.token) setTgToken(cfg.token)
-    if (cfg?.chatId) setTgChatId(cfg.chatId)
+    async function loadTgConfig() {
+      // 1. localStorage (fast, set by auth seed on login)
+      const cached = getTelegramConfig()
+      if (cached?.token) {
+        setTgToken(cached.token)
+        setTgChatId(cached.chatId || '')
+        return
+      }
+      // 2. Supabase (slower, but authoritative)
+      const dbCfg = await getTelegramConfigDb()
+      if (dbCfg?.token) {
+        setTgToken(dbCfg.token)
+        setTgChatId(dbCfg.chatId || '')
+      }
+    }
+    loadTgConfig()
   }, [])
 
   // Check Gmail connection on mount
