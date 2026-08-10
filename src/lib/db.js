@@ -372,10 +372,11 @@ export function saveUiPref(key, value) {
 
 export async function savePortfolio(items) {
   if (useSupabase()) {
-    // Delete all and re-insert (simple approach for small datasets)
-    await supabase.from('portfolio_items').delete().eq('user_id', _userId)
-    if (items.length > 0) {
-      // Ensure every item has a valid string ID (not a float)
+    if (items.length === 0) {
+      // Only delete when explicitly emptying the portfolio
+      await supabase.from('portfolio_items').delete().eq('user_id', _userId)
+    } else {
+      // Use upsert instead of delete+insert — atomic and safe
       const rows = items.map((item, i) => ({
         id: typeof item.id === 'string' ? item.id : genId(),
         user_id: _userId,
@@ -388,14 +389,23 @@ export async function savePortfolio(items) {
         sort_order: i,
         created_at: item.createdAt || new Date().toISOString(),
       }))
-      const { error } = await supabase.from('portfolio_items').insert(rows)
-      if (error) console.error('[db] savePortfolio error:', error)
-      else {
-        // Update local items with the normalized string IDs
-        const normalized = items.map((item, i) => ({
-          ...item,
-          id: rows[i].id,
-        }))
+
+      const { error } = await supabase.from('portfolio_items').upsert(rows, {
+        onConflict: 'id',
+        ignoreDuplicates: false,
+      })
+      if (error) {
+        console.error('[db] savePortfolio error:', error)
+        // Don't lose data — fall through to localStorage save
+      } else {
+        // Remove any items that no longer exist (deleted by user)
+        const currentIds = rows.map(r => r.id)
+        await supabase.from('portfolio_items')
+          .delete()
+          .eq('user_id', _userId)
+          .not('id', 'in', `(${currentIds.map(id => `"${id}"`).join(',')})`)
+
+        const normalized = items.map((item, i) => ({ ...item, id: rows[i].id }))
         lsSet('portfolio_items', normalized)
         return
       }

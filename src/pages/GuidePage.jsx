@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { getGuide, saveGuide } from '../lib/db.js'
+import { useAuth } from '../lib/AuthContext.jsx'
 
 const BLOCK_TYPES = [
   { type: 'h1', label: 'Encabezado 1', icon: 'H1' },
@@ -154,23 +156,41 @@ function Block({ block, index, total, onChange, onDelete, onMoveUp, onMoveDown, 
 }
 
 export default function GuidePage() {
+  const { user } = useAuth()
   const [blocks, setBlocks] = useState(() => {
+    // Fast load from localStorage cache on first render
     try {
       const saved = localStorage.getItem('studio_guide')
       return saved ? JSON.parse(saved) : DEFAULT_BLOCKS
     } catch { return DEFAULT_BLOCKS }
   })
-  const [saveStatus, setSaveStatus] = useState(null) // 'saving' | 'saved'
+  const [saveStatus, setSaveStatus] = useState(null)
   const [showAddMenu, setShowAddMenu] = useState(false)
   const saveTimer = useRef(null)
 
-  // Autosave with debounce
+  // Load from Supabase on mount / user change (authoritative source)
+  useEffect(() => {
+    getGuide().then(data => {
+      if (data && data.length > 0) {
+        setBlocks(data)
+        localStorage.setItem('studio_guide', JSON.stringify(data))
+      }
+    }).catch(() => {})
+  }, [user?.id])
+
+  // Autosave with debounce — writes to BOTH Supabase and localStorage
   useEffect(() => {
     setSaveStatus('saving')
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      localStorage.setItem('studio_guide', JSON.stringify(blocks))
-      setSaveStatus('saved')
+    saveTimer.current = setTimeout(async () => {
+      try {
+        await saveGuide(blocks)  // saves to Supabase + localStorage
+        setSaveStatus('saved')
+      } catch {
+        // Fallback: at least save locally
+        localStorage.setItem('studio_guide', JSON.stringify(blocks))
+        setSaveStatus('saved')
+      }
       setTimeout(() => setSaveStatus(null), 2000)
     }, 1000)
     return () => clearTimeout(saveTimer.current)

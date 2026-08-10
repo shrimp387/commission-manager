@@ -30,10 +30,10 @@ La app es funcional y está lista para producción en sus funciones core. La inf
 
 | # | Bug | Archivo | Prioridad | Estado |
 |---|---|---|---|---|
-| 1 | **Timer llama Supabase cada segundo** (1 upsert/seg por tarea activa) | `store/taskStore.js` | ALTA | ⬜ Pendiente |
-| 2 | **`insertPublicRequest` no guarda en Supabase** — TODO en el código | `lib/db.js` | ALTA | ⬜ Pendiente |
-| 3 | **Dashboard "AVANCE PROMEDIO" hardcodeado al 30%** | `components/Dashboard.jsx` | ALTA | ⬜ Pendiente |
-| 4 | **Dashboard "ATENCIÓN HOY" = mismo valor que "ACTIVAS"** | `pages/StudioPage.jsx` | MEDIA | ⬜ Pendiente |
+| 1 | **Timer llama Supabase cada segundo** (1 upsert/seg por tarea activa) | `store/taskStore.js` | ALTA | ✅ Completado v1.7.2 |
+| 2 | **`insertPublicRequest` no guarda en Supabase** — TODO en el código | `lib/db.js` | ALTA | ✅ Completado v1.7.2 |
+| 3 | **Dashboard "AVANCE PROMEDIO" hardcodeado al 30%** | `components/Dashboard.jsx` | ALTA | ✅ Completado v1.7.2 |
+| 4 | **Dashboard "ATENCIÓN HOY" = mismo valor que "ACTIVAS"** | `pages/StudioPage.jsx` | MEDIA | ✅ Completado v1.7.2 |
 | 5 | **`savePortfolio` hace delete+insert no atómico** (riesgo de pérdida de datos) | `lib/db.js` | MEDIA | ⬜ Pendiente |
 | 6 | **GuidePage guarda bloques solo a localStorage** — nunca a Supabase | `pages/GuidePage.jsx` | MEDIA | ⬜ Pendiente |
 
@@ -91,9 +91,9 @@ La app es funcional y está lista para producción en sus funciones core. La inf
 ## Plan de trabajo
 
 ### Fase 1 — Bugs críticos (activo)
-- [x] Timer debounce a Supabase
-- [x] insertPublicRequest → Supabase
-- [x] Dashboard métricas reales
+- [x] Timer debounce a Supabase ✅
+- [x] insertPublicRequest → Supabase ✅
+- [x] Dashboard métricas reales ✅
 
 ### Fase 2 — Deuda técnica
 - [ ] savePortfolio → upsert atómico
