@@ -1,8 +1,9 @@
 /**
  * Store global de campos de tareas.
- * Persiste en localStorage y sincroniza con Taskade API en segundo plano.
+ * Persiste en localStorage (fallback) y Supabase (cuando disponible).
  */
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { setTaskFieldDb } from '../lib/db.js'
 
 const LS_KEY = 'task_fields'
 
@@ -64,7 +65,8 @@ export function setTaskField(taskId, field, value) {
   notifyStatus('saving')
   saveAll(_cache)
   notifyData()
-  // Brief "saved" feedback
+  // Also sync to Supabase (fire and forget — localStorage is the source of truth locally)
+  setTaskFieldDb(taskId, field, value).catch(() => {})
   setTimeout(() => notifyStatus('saved'), 300)
   setTimeout(() => notifyStatus('idle'), 2000)
 }

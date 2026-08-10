@@ -1,0 +1,19 @@
+{
+  "major": 1,
+  "minor": 1,
+  "patch": 0,
+  "history": [
+    {
+      "version": "v1.0.0",
+      "date": "2026-08-09T00:00:00",
+      "message": "feat: estudio de comisiones v1 - deploy ready",
+      "bump": "major"
+    },
+    {
+      "version": "v1.1.0",
+      "date": "2026-08-09T22:00:00",
+      "message": "feat: Supabase auth + login page + db layer + delivery emails",
+      "bump": "minor"
+    }
+  ]
+}
