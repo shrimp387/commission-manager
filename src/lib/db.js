@@ -558,3 +558,60 @@ export async function getAllTaskStructures() {
     return []
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ATTACHMENT RECOVERY — reconstruct task attachments from R2
+// ═══════════════════════════════════════════════════════════════════════════
+
+const WORKER_URL = import.meta.env.VITE_R2_WORKER_URL
+
+/**
+ * Lists all attachment files in R2 for this user, grouped by taskId.
+ * R2 path: {userId}/attachments/{taskId}/{filename}
+ * Returns { [taskId]: [{ id, name, url, storageKey, backend, type }] }
+ */
+export async function getR2AttachmentsByTask() {
+  if (!supabase || !_userId || !WORKER_URL) return {}
+  try {
+    const { data } = await supabase.auth.getSession()
+    const token = data?.session?.access_token
+    if (!token) return {}
+
+    const res = await fetch(`${WORKER_URL}/list/${_userId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return {}
+
+    const json = await res.json()
+    const files = (json.objects ?? []).filter(f =>
+      f.key?.includes('/attachments/') && !f.key?.includes('/attachments/unknown/')
+    )
+
+    const grouped = {}
+    for (const f of files) {
+      // Path: userId/attachments/taskId/filename
+      const parts = f.key.split('/')
+      if (parts.length < 4) continue
+      const taskId = parts[2]
+      const filename = parts.slice(3).join('/')
+      const ext = filename.split('.').pop()?.toLowerCase()
+      const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)
+
+      if (!grouped[taskId]) grouped[taskId] = []
+      grouped[taskId].push({
+        id: f.key,
+        name: filename.replace(/^\d+_[a-z0-9]+_/, ''), // strip timestamp prefix
+        url: `${WORKER_URL}/file/${f.key}`,
+        storageKey: f.key,
+        backend: 'r2',
+        type: isImage ? `image/${ext === 'jpg' ? 'jpeg' : ext}` : 'application/octet-stream',
+        size: f.size ?? 0,
+        addedAt: f.uploaded ?? new Date().toISOString(),
+      })
+    }
+    return grouped
+  } catch (e) {
+    console.warn('[db] getR2AttachmentsByTask failed:', e?.message)
+    return {}
+  }
+}

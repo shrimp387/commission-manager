@@ -5,8 +5,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase, isSupabaseReady } from './supabase.js'
 import { onAuthStateChange } from './auth.js'
-import { setCurrentUserId, getAllTasks, getProfile, getPortfolio, getGuide, getKanbanConfig, getRequests, getTelegramConfig, getGmailTokensDb, getUiPrefs } from './db.js'
-import { initTaskFields, seedTaskFields, clearTaskStoreCache } from '../store/taskStore.js'
+import { setCurrentUserId, getAllTasks, getProfile, getPortfolio, getGuide, getKanbanConfig, getRequests, getTelegramConfig, getGmailTokensDb, getUiPrefs, getR2AttachmentsByTask } from './db.js'
+import { initTaskFields, seedTaskFields, clearTaskStoreCache, getTaskFields, setTaskField } from '../store/taskStore.js'
 import { reloadConfigFromStorage } from '../store/appConfig.js'
 
 const AuthContext = createContext(null)
@@ -147,6 +147,23 @@ async function seedLocalStoreFromSupabase(userId) {
       })
     }
   } catch (e) { console.warn('[auth] ui_prefs seed failed', e) }
+
+  // Recover attachments from R2 and merge into task_fields
+  try {
+    const r2Attachments = await getR2AttachmentsByTask()
+    const taskIds = Object.keys(r2Attachments)
+    if (taskIds.length > 0) {
+      for (const taskId of taskIds) {
+        const existing = getTaskFields(taskId)
+        const existingAtts = existing?.attachments ?? []
+        const existingUrls = new Set(existingAtts.map(a => a.url))
+        const newAtts = r2Attachments[taskId].filter(a => !existingUrls.has(a.url))
+        if (newAtts.length > 0) {
+          setTaskField(taskId, 'attachments', [...existingAtts, ...newAtts])
+        }
+      }
+    }
+  } catch (e) { console.warn('[auth] R2 attachment recovery failed', e) }
 
   // Reload the in-memory appConfig singleton from the freshly-seeded localStorage
   reloadConfigFromStorage()
