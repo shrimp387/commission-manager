@@ -6,11 +6,39 @@ import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase, isSupabaseReady } from './supabase.js'
 import { onAuthStateChange } from './auth.js'
 import { setCurrentUserId, getAllTasks, getProfile, getPortfolio, getGuide, getKanbanConfig } from './db.js'
-import { initTaskFields } from '../store/taskStore.js'
+import { initTaskFields, clearTaskStoreCache } from '../store/taskStore.js'
 
 const AuthContext = createContext(null)
 
+// Keys that must be cleared when switching users
+const USER_SCOPED_LS_KEYS = [
+  'app_config',
+  'task_fields',
+  'local_tasks',
+  'commission_requests',
+  'portfolio_items',
+  'studio_guide',
+  'kanban_custom_sections',
+  'kanban_order',
+  'kanban_colors',
+  'kanban_labels',
+  'page_backgrounds',
+  'stickers',
+]
+
+function clearUserScopedStorage() {
+  USER_SCOPED_LS_KEYS.forEach(key => localStorage.removeItem(key))
+}
+
 async function seedLocalStoreFromSupabase(userId) {
+  // If a different user was previously logged in, wipe their local data first
+  const prevUserId = localStorage.getItem('_current_user_id')
+  if (prevUserId && prevUserId !== userId) {
+    clearUserScopedStorage()
+    clearTaskStoreCache()
+  }
+  localStorage.setItem('_current_user_id', userId)
+
   setCurrentUserId(userId)
 
   // Load tasks into in-memory store
@@ -80,6 +108,10 @@ export function AuthProvider({ children }) {
       if (session?.user) {
         seedLocalStoreFromSupabase(session.user.id)
       } else {
+        // User signed out — clear their local data
+        clearUserScopedStorage()
+        clearTaskStoreCache()
+        localStorage.removeItem('_current_user_id')
         setCurrentUserId(null)
       }
     })

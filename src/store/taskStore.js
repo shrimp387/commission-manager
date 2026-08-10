@@ -50,6 +50,12 @@ const _listeners = new Set()
 let _saveStatus = 'idle' // 'saving' | 'saved' | 'idle'
 const _statusListeners = new Set()
 
+/** Called by AuthContext when a different user logs in — wipes the in-memory cache. */
+export function clearTaskStoreCache() {
+  _cache = {}
+  notifyData()
+}
+
 function notifyData() {
   _listeners.forEach(fn => fn({ ..._cache }))
 }

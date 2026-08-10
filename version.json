@@ -1,7 +1,7 @@
 {
   "major": 1,
   "minor": 1,
-  "patch": 1,
+  "patch": 2,
   "history": [
     {
       "version": "v1.0.0",
@@ -19,6 +19,12 @@
       "version": "v1.1.1",
       "date": "2026-08-10T01:11:18.521859",
       "message": "fix(outh gmail fix): se supone se corrriguo un bug",
+      "bump": "patch"
+    },
+    {
+      "version": "v1.1.2",
+      "date": "2026-08-10T01:18:50.115283",
+      "message": "fix: aislar datos de localStorage por usuario al cambiar sesión",
       "bump": "patch"
     }
   ]
