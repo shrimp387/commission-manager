@@ -1,7 +1,8 @@
 /**
  * Store global de configuración visual de la app.
- * Persiste en localStorage bajo 'app_config'.
+ * Persiste en localStorage bajo 'app_config' Y en Supabase (tabla profiles).
  */
+import { updateProfile } from '../lib/db.js'
 
 const LS_KEY = 'app_config'
 
@@ -53,6 +54,36 @@ try {
 function save() {
   localStorage.setItem(LS_KEY, JSON.stringify(_config))
   _listeners.forEach(fn => fn({ ..._config }))
+  // Sync to Supabase (fire and forget)
+  syncToSupabase()
+}
+
+// Debounce Supabase writes to avoid hammering on rapid changes (e.g. color picker drag)
+let _syncTimer = null
+function syncToSupabase() {
+  if (_syncTimer) clearTimeout(_syncTimer)
+  _syncTimer = setTimeout(async () => {
+    try {
+      await updateProfile({
+        project_name: _config.projectName,
+        project_subtitle: _config.projectSubtitle,
+        project_icon: _config.projectIcon,
+        project_banner_url: _config.projectBannerUrl,
+        accent_color: _config.accentColor,
+        font_family: _config.fontFamily,
+        font_size: _config.fontSize,
+        global_bg_url: _config.globalBgUrl,
+        global_bg_opacity: _config.globalBgOpacity,
+        sidebar_width: _config.sidebarWidth,
+        section_bgs: _config.sectionBgs,
+        section_icons: _config.sectionIcons,
+        telegram_sticker_sets: _config.telegramStickerSets,
+      })
+    } catch (e) {
+      // Supabase not ready or offline — localStorage is the fallback
+      console.warn('[appConfig] Supabase sync failed (offline?):', e?.message)
+    }
+  }, 800) // wait 800ms after last change before writing
 }
 
 export function getConfig() { return { ..._config } }
@@ -72,6 +103,19 @@ export function setConfigMulti(updates) {
 export function subscribeConfig(fn) {
   _listeners.add(fn)
   return () => _listeners.delete(fn)
+}
+
+/**
+ * Called by AuthContext after seeding profile from Supabase.
+ * Reloads app_config from localStorage into the in-memory singleton.
+ */
+export function reloadConfigFromStorage() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}')
+    _config = { ...DEFAULTS, ...saved }
+    _listeners.forEach(fn => fn({ ..._config }))
+    applyConfig()
+  } catch {}
 }
 
 // Apply CSS variables globally

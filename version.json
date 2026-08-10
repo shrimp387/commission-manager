@@ -1,7 +1,7 @@
 {
   "major": 1,
   "minor": 2,
-  "patch": 0,
+  "patch": 1,
   "history": [
     {
       "version": "v1.0.0",
@@ -32,6 +32,12 @@
       "date": "2026-08-10T01:59:06.208129",
       "message": "feat: subir attachments a Supabase Storage en vez de base64 localStorage",
       "bump": "minor"
+    },
+    {
+      "version": "v1.2.1",
+      "date": "2026-08-10T08:46:39.271657",
+      "message": "fix: guardado de profile",
+      "bump": "patch"
     }
   ]
 }

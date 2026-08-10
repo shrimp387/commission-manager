@@ -7,6 +7,7 @@ import { supabase, isSupabaseReady } from './supabase.js'
 import { onAuthStateChange } from './auth.js'
 import { setCurrentUserId, getAllTasks, getProfile, getPortfolio, getGuide, getKanbanConfig } from './db.js'
 import { initTaskFields, seedTaskFields, clearTaskStoreCache } from '../store/taskStore.js'
+import { reloadConfigFromStorage } from '../store/appConfig.js'
 
 const AuthContext = createContext(null)
 
@@ -106,6 +107,9 @@ async function seedLocalStoreFromSupabase(userId) {
     if (Object.keys(kanban.colorOverrides || {}).length) localStorage.setItem('kanban_colors', JSON.stringify(kanban.colorOverrides))
     if (Object.keys(kanban.labelOverrides || {}).length) localStorage.setItem('kanban_labels', JSON.stringify(kanban.labelOverrides))
   } catch (e) { console.warn('[auth] kanban seed failed', e) }
+
+  // Reload the in-memory appConfig singleton from the freshly-seeded localStorage
+  reloadConfigFromStorage()
 }
 
 export function AuthProvider({ children }) {
