@@ -125,6 +125,7 @@ export default function PortfolioPage() {
   const [activeTag, setActiveTag] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const [dragIndex, setDragIndex] = useState(null)
+  const [uploadWarning, setUploadWarning] = useState(null) // null | 'base64' | 'ok'
   const fileInputRef = useRef(null)
   const { user } = useAuth()
 
@@ -185,7 +186,8 @@ export default function PortfolioPage() {
           }
 
           // Final fallback: base64
-          return new Promise(resolve => {
+          console.warn('[portfolio] R2 y Supabase Storage fallaron — usando base64. La imagen no persistirá entre builds.')
+          const base64Result = await new Promise(resolve => {
             const r = new FileReader()
             r.onload = e => resolve({
               id: Date.now() + Math.random(),
@@ -199,9 +201,21 @@ export default function PortfolioPage() {
             })
             r.readAsDataURL(file)
           })
+          return { ...base64Result, _isBase64Fallback: true }
         })
     )
-    save([...items, ...newImgs])
+
+    const hasBase64 = newImgs.some(img => img._isBase64Fallback)
+    if (hasBase64) {
+      setUploadWarning('base64')
+      setTimeout(() => setUploadWarning(null), 8000)
+    } else {
+      setUploadWarning('ok')
+      setTimeout(() => setUploadWarning(null), 3000)
+    }
+
+    // Strip internal flag before saving
+    save([...items, ...newImgs.map(({ _isBase64Fallback, ...img }) => img)])
   }
 
   function handleDelete(index) {
@@ -259,6 +273,30 @@ export default function PortfolioPage() {
       </div>
 
       <div className="page-body">
+
+        {/* Upload status banner */}
+        {uploadWarning === 'base64' && (
+          <div role="alert" style={{
+            background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)',
+            borderRadius: 'var(--radius-sm)', padding: '0.65rem 0.875rem',
+            marginBottom: '0.75rem', fontSize: '0.78rem', color: '#fca5a5',
+          }}>
+            <strong>⚠ La imagen NO se subió a R2.</strong> Se guardó en modo base64 local — se perderá con el próximo deploy.<br/>
+            <span style={{ color: 'rgba(252,165,165,0.7)' }}>
+              Causa probable: no hay sesión activa de Google. Cierra sesión y vuelve a iniciar para que el upload a R2 funcione.
+            </span>
+          </div>
+        )}
+        {uploadWarning === 'ok' && (
+          <div role="status" style={{
+            background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)',
+            borderRadius: 'var(--radius-sm)', padding: '0.65rem 0.875rem',
+            marginBottom: '0.75rem', fontSize: '0.78rem', color: '#86efac',
+          }}>
+            ✓ Imagen subida a Cloudflare R2 correctamente.
+          </div>
+        )}
+
         {/* Tag filter */}
         {allTags.length > 0 && (
           <div className="tag-filter" role="group" aria-label="Filtrar por tag">

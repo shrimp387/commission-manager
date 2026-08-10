@@ -18,9 +18,15 @@ const ALLOWED_ORIGINS = [
 ]
 
 function corsHeaders(origin) {
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  // Allow any Vercel preview deployment + production + localhost
+  const isAllowed =
+    ALLOWED_ORIGINS.includes(origin) ||
+    /^https:\/\/commission-manager-[a-z0-9]+-onemanteam1\.vercel\.app$/.test(origin) ||
+    /^http:\/\/localhost(:\d+)?$/.test(origin)
+
+  const allowedOrigin = isAllowed ? origin : ALLOWED_ORIGINS[0]
   return {
-    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',

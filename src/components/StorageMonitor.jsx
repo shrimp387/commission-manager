@@ -113,6 +113,8 @@ const EXPECTED_LS_KEYS = new Set([
 
 function isExpectedKey(key) {
   if (EXPECTED_LS_KEYS.has(key)) return true
+  // Supabase auth token — normal, stored by Supabase JS SDK
+  if (/^sb-.+-auth-token$/.test(key)) return true
   // user-scoped backups like local_tasks_<uuid>
   if (/^(local_tasks|task_fields|archived_commissions)_[a-f0-9-]{36}$/.test(key)) return true
   return false
