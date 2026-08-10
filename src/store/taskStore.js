@@ -50,9 +50,18 @@ const _listeners = new Set()
 let _saveStatus = 'idle' // 'saving' | 'saved' | 'idle'
 const _statusListeners = new Set()
 
+// ── Debounce map for high-frequency fields (timer, timerRunning) ───────────
+// Key: `${taskId}:${field}`, Value: timeout ID
+const _debounceMap = new Map()
+const DEBOUNCE_FIELDS = new Set(['timer', 'timerRunning'])
+const DEBOUNCE_MS = 30000 // 30 seconds for timer fields
+
 /** Called by AuthContext when a different user logs in — wipes the in-memory cache. */
 export function clearTaskStoreCache() {
   _cache = {}
+  // Cancel any pending debounced writes
+  _debounceMap.forEach(id => clearTimeout(id))
+  _debounceMap.clear()
   notifyData()
 }
 
@@ -71,8 +80,22 @@ export function setTaskField(taskId, field, value) {
   notifyStatus('saving')
   saveAll(_cache)
   notifyData()
-  // Also sync to Supabase (fire and forget — localStorage is the source of truth locally)
-  setTaskFieldDb(taskId, field, value).catch(() => {})
+
+  // High-frequency fields (timer ticks) are debounced to avoid hammering Supabase
+  if (DEBOUNCE_FIELDS.has(field)) {
+    const key = `${taskId}:${field}`
+    const existing = _debounceMap.get(key)
+    if (existing) clearTimeout(existing)
+    const id = setTimeout(() => {
+      _debounceMap.delete(key)
+      setTaskFieldDb(taskId, field, value).catch(() => {})
+    }, DEBOUNCE_MS)
+    _debounceMap.set(key, id)
+  } else {
+    // Non-timer fields sync immediately
+    setTaskFieldDb(taskId, field, value).catch(() => {})
+  }
+
   setTimeout(() => notifyStatus('saved'), 300)
   setTimeout(() => notifyStatus('idle'), 2000)
 }

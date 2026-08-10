@@ -10,7 +10,7 @@ import { saveUiPref } from '../lib/db.js'
 
 export default function StudioPage() {
   const { sections, loading, error, syncStatus, reload, toggleTask, addCommission, removeTask, renameTask, moveTask } = useTasks()
-  const { saveStatus } = useTaskStore()
+  const { saveStatus, getFields } = useTaskStore()
   const config = useConfig()
 
   const userId = localStorage.getItem('_current_user_id') || 'default'
@@ -36,8 +36,9 @@ export default function StudioPage() {
 
   const allItems = sections.flatMap(s => s.items)
   const active = allItems.filter(t => !t.completed).length
-  const inReview = sections.find(s => s.label.includes('Revisión'))?.items.length ?? 0
-  const urgent = allItems.filter(t => !t.completed).length
+  const activeTasks = allItems.filter(t => !t.completed)
+  const inReview = sections.find(s => s.label.includes('Revisión'))?.items.filter(t => !t.completed).length ?? 0
+  const urgent = active // fallback if getFields not ready yet
 
   return (
     <div className="page">
@@ -94,7 +95,8 @@ export default function StudioPage() {
           </div>
         )}
 
-        <Dashboard active={active} inReview={inReview} urgent={urgent} loading={loading} />
+        <Dashboard active={active} inReview={inReview} urgent={urgent} loading={loading}
+          activeTasks={activeTasks} getFields={getFields} />
 
         <div className="section-header">
           <div>

@@ -212,13 +212,38 @@ export async function saveRequest(request) {
   lsSet('commission_requests', all)
 }
 
-// Public insert (no auth required — from client form)
+// Public insert — from client commission form (artist is logged in as owner)
 export async function insertPublicRequest(request) {
-  if (supabase) {
-    // For public requests we need the studio owner's user_id
-    // For now we use localStorage as the public form doesn't know the admin userId
-    // TODO: add studio_slug lookup when multi-user is enabled
+  // Uses the currently logged-in artist's userId as owner
+  if (useSupabase()) {
+    const { error } = await supabase
+      .from('commission_requests')
+      .upsert({
+        id: request.id,
+        user_id: _userId,
+        status: request.status ?? 'pending',
+        name: request.name,
+        email: request.email,
+        social: request.social ?? '',
+        artwork_type: request.artworkType ?? '',
+        description: request.description ?? '',
+        usage: request.usage ?? '',
+        styles: request.styles ?? [],
+        formats: request.formats ?? [],
+        size: request.size ?? '',
+        deadline: request.deadline ?? '',
+        budget_min: request.budgetMin ?? null,
+        budget_max: request.budgetMax ?? null,
+        notes: request.notes ?? '',
+        ref_notes: request.refNotes ?? '',
+        images: request.images ?? [],
+        reject_reason: '',
+        payment_details: null,
+        with_payment: request.withPayment ?? false,
+      })
+    if (error) console.error('[db] insertPublicRequest error:', error)
   }
+  // Also cache in localStorage
   const all = lsGet('commission_requests', [])
   lsSet('commission_requests', [request, ...all])
 }
