@@ -98,8 +98,8 @@ La app es funcional y está lista para producción en sus funciones core. La inf
 ### Fase 2 — Deuda técnica
 - [x] savePortfolio → upsert atómico ✅
 - [x] GuidePage → Supabase ✅
-- [ ] task_fields cleanup (remover tareas eliminadas del caché)
-- [ ] Lightbox stale closure fix
+- [x] task_fields cleanup (remover tareas eliminadas del caché) ✅
+- [x] Lightbox stale closure fix ✅
 
 ### Fase 3 — Features básicas faltantes
 - [ ] Buscador global (Ctrl-K)

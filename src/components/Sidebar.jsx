@@ -6,6 +6,7 @@ import ProximamentePanel from './ProximamentePanel.jsx'
 import { useAuth } from '../lib/AuthContext.jsx'
 import { signOut } from '../lib/auth.js'
 import { isSupabaseReady } from '../lib/supabase.js'
+import GlobalSearch from './GlobalSearch.jsx'
 
 const NAV_ITEMS = [
   { id: 'studio', icon: '🔭', label: 'Estudio de Comisiones' },
@@ -25,16 +26,30 @@ export default function Sidebar({ active, onNavigate, mobileOpen, onMobileClose 
   const config = useConfig()
   const { handleMouseDown, handleDoubleClick } = useResizableSidebar()
   const [activePanel, setActivePanel] = useState(null)
+  const [showSearch, setShowSearch] = useState(false)
   const { user } = useAuth()
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Admin'
   const avatarLetter = displayName[0].toUpperCase()
   const avatarUrl = user?.user_metadata?.avatar_url
 
+  // Ctrl-K / Cmd-K global shortcut
+  React.useEffect(() => {
+    function onKey(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setShowSearch(s => !s)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   async function handleSignOut() {
     try { await signOut() } catch {}
   }
   return (
+    <>
     <aside className={`sidebar ${mobileOpen ? 'sidebar--open' : ''}`} aria-label="Navegación principal">
       {/* Brand */}
       <div className="sidebar-brand">
@@ -47,13 +62,14 @@ export default function Sidebar({ active, onNavigate, mobileOpen, onMobileClose 
       </div>
 
       {/* Search */}
-      <div className="sidebar-search">
+      <div className="sidebar-search" onClick={() => setShowSearch(true)} style={{ cursor: 'pointer' }} role="button" aria-label="Abrir buscador global (Ctrl-K)" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setShowSearch(true)}>
         <span className="sidebar-search-icon" aria-hidden="true">🔍</span>
         <input
           className="sidebar-search-input"
           placeholder="Buscar..."
           aria-label="Buscar en el workspace"
           readOnly
+          style={{ cursor: 'pointer', pointerEvents: 'none' }}
         />
         <kbd className="sidebar-search-kbd">Ctrl K</kbd>
       </div>
@@ -155,5 +171,14 @@ export default function Sidebar({ active, onNavigate, mobileOpen, onMobileClose 
         />
       )}
     </aside>
+
+    {/* Global Search modal — rendered outside sidebar */}
+    {showSearch && (
+      <GlobalSearch
+        onNavigate={(page) => { onNavigate(page); onMobileClose?.() }}
+        onClose={() => setShowSearch(false)}
+      />
+    )}
+    </>
   )
 }
