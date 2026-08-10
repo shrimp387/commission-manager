@@ -5,6 +5,46 @@ import { supabase } from '../lib/supabase.js'
 import { getCurrentUserId } from '../lib/db.js'
 import { useAuth } from '../lib/AuthContext.jsx'
 
+const WORKER_URL = import.meta.env.VITE_R2_WORKER_URL
+
+/**
+ * Lists all files under userId/portfolio/ in R2 and builds portfolio items.
+ * This is the recovery path when Supabase metadata is lost but R2 files exist.
+ */
+async function reconstructPortfolioFromR2(userId) {
+  if (!WORKER_URL || !userId) return []
+  try {
+    const { data } = await supabase.auth.getSession()
+    const token = data?.session?.access_token
+    if (!token) return []
+
+    const res = await fetch(`${WORKER_URL}/list/${userId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return []
+
+    const json = await res.json()
+    const files = (json.objects ?? []).filter(f => f.key?.includes('/portfolio/'))
+
+    return files.map(f => {
+      const name = f.key.split('/').pop() ?? f.key
+      return {
+        id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        url: `${WORKER_URL}/file/${f.key}`,
+        storageKey: f.key,
+        backend: 'r2',
+        title: name.replace(/\.[^.]+$/, '').replace(/^\d+_[a-z0-9]+_/, ''),
+        description: '',
+        tags: [],
+        createdAt: f.uploaded ?? new Date().toISOString(),
+      }
+    })
+  } catch (e) {
+    console.warn('[portfolio] reconstructFromR2 error:', e)
+    return []
+  }
+}
+
 function PortfolioItem({ item, index, onEdit, onDelete, onOpen, onDragStart, onDragOver, onDrop }) {
   const [hover, setHover] = useState(false)
 
@@ -126,26 +166,52 @@ export default function PortfolioPage() {
   const [dragOver, setDragOver] = useState(false)
   const [dragIndex, setDragIndex] = useState(null)
   const [uploadWarning, setUploadWarning] = useState(null) // null | 'base64' | 'ok'
+  const [syncing, setSyncing] = useState(false)
   const fileInputRef = useRef(null)
   const { user } = useAuth()
 
-  // Load from Supabase/localStorage — re-runs when user changes (login/logout)
+  // ── Load portfolio — 3-layer fallback: Supabase → localStorage → R2 reconstruction ──
   useEffect(() => {
-    getPortfolio().then(data => {
-      if (data && data.length > 0) {
-        setItems(data)
-      } else {
-        // Supabase vacío — intenta recuperar desde localStorage
-        const lsItems = JSON.parse(localStorage.getItem('portfolio_items') || '[]')
-        if (lsItems.length > 0) {
-          setItems(lsItems)
-          // Re-sync to Supabase now that session is active
-          savePortfolio(lsItems).catch(e => console.warn('[portfolio] re-sync failed:', e))
-        }
-      }
-    }).catch(() => {
+    if (!user?.id) {
       setItems(JSON.parse(localStorage.getItem('portfolio_items') || '[]'))
-    })
+      return
+    }
+
+    async function loadPortfolio() {
+      // 1. Supabase (source of truth after first sync)
+      const dbItems = await getPortfolio().catch(() => [])
+      if (dbItems && dbItems.length > 0) {
+        setItems(dbItems)
+        localStorage.setItem('portfolio_items', JSON.stringify(dbItems))
+        return
+      }
+
+      // 2. localStorage cache (non-base64 items only)
+      const lsItems = JSON.parse(localStorage.getItem('portfolio_items') || '[]')
+        .filter(i => !i.url?.startsWith('data:'))
+      if (lsItems.length > 0) {
+        setItems(lsItems)
+        savePortfolio(lsItems).catch(() => {})
+        return
+      }
+
+      // 3. Reconstruct from R2 — builds metadata from actual files in the bucket
+      setSyncing(true)
+      try {
+        const r2Items = await reconstructPortfolioFromR2(user.id)
+        if (r2Items.length > 0) {
+          setItems(r2Items)
+          await savePortfolio(r2Items)
+          localStorage.setItem('portfolio_items', JSON.stringify(r2Items))
+        }
+      } catch (e) {
+        console.warn('[portfolio] R2 reconstruction failed:', e)
+      } finally {
+        setSyncing(false)
+      }
+    }
+
+    loadPortfolio()
   }, [user?.id])
 
   async function save(updated) {
@@ -282,6 +348,19 @@ export default function PortfolioPage() {
       </div>
 
       <div className="page-body">
+
+        {/* Syncing from R2 banner */}
+        {syncing && (
+          <div role="status" style={{
+            background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.3)',
+            borderRadius: 'var(--radius-sm)', padding: '0.65rem 0.875rem',
+            marginBottom: '0.75rem', fontSize: '0.78rem', color: '#93c5fd',
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+          }}>
+            <span className="mini-spinner" style={{ display: 'inline-block', width: 14, height: 14, borderWidth: 2 }} />
+            Recuperando imágenes desde Cloudflare R2...
+          </div>
+        )}
 
         {/* Upload status banner */}
         {uploadWarning === 'base64' && (
