@@ -6,13 +6,13 @@ import KanbanBoard from '../components/KanbanBoard.jsx'
 import NewCommissionModal from '../components/NewCommissionModal.jsx'
 import { useTaskStore } from '../store/taskStore.js'
 import { useConfig } from '../hooks/useConfig.js'
+import { saveUiPref } from '../lib/db.js'
 
 export default function StudioPage() {
   const { sections, loading, error, syncStatus, reload, toggleTask, addCommission, removeTask, renameTask, moveTask } = useTasks()
   const { saveStatus } = useTaskStore()
   const config = useConfig()
 
-  // User-scoped view preference — avoid leaking between users on the same browser
   const userId = localStorage.getItem('_current_user_id') || 'default'
   const viewKey = `studio_view_mode_${userId}`
   const collapseKey = `studio_header_collapsed_${userId}`
@@ -24,11 +24,13 @@ export default function StudioPage() {
   function toggleHeader() {
     const next = !headerCollapsed
     setHeaderCollapsed(next)
+    saveUiPref('studio_header_collapsed', next)
     localStorage.setItem(collapseKey, String(next))
   }
 
   function handleSetView(v) {
     setView(v)
+    saveUiPref('studio_view_mode', v)
     localStorage.setItem(viewKey, v)
   }
 

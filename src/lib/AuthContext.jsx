@@ -5,7 +5,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase, isSupabaseReady } from './supabase.js'
 import { onAuthStateChange } from './auth.js'
-import { setCurrentUserId, getAllTasks, getProfile, getPortfolio, getGuide, getKanbanConfig, getRequests } from './db.js'
+import { setCurrentUserId, getAllTasks, getProfile, getPortfolio, getGuide, getKanbanConfig, getRequests, getTelegramConfig, getGmailTokensDb, getUiPrefs } from './db.js'
 import { initTaskFields, seedTaskFields, clearTaskStoreCache } from '../store/taskStore.js'
 import { reloadConfigFromStorage } from '../store/appConfig.js'
 
@@ -120,6 +120,33 @@ async function seedLocalStoreFromSupabase(userId) {
     const guide = await getGuide()
     if (guide) localStorage.setItem('studio_guide', JSON.stringify(guide))
   } catch (e) { console.warn('[auth] guide seed failed', e) }
+
+  // Pre-load Telegram config into localStorage cache
+  try {
+    const tg = await getTelegramConfig()
+    if (tg?.token) {
+      const key = `telegram_config_${userId}`
+      localStorage.setItem(key, JSON.stringify(tg))
+    }
+  } catch (e) { console.warn('[auth] telegram seed failed', e) }
+
+  // Pre-load Gmail tokens into localStorage cache
+  try {
+    const gmailTokens = await getGmailTokensDb()
+    if (gmailTokens?.access_token) {
+      localStorage.setItem('gmail_tokens', JSON.stringify(gmailTokens))
+    }
+  } catch (e) { console.warn('[auth] gmail seed failed', e) }
+
+  // Restore UI prefs from Supabase (view mode, collapsed state, etc.)
+  try {
+    const uiPrefs = await getUiPrefs()
+    if (uiPrefs && Object.keys(uiPrefs).length > 0) {
+      Object.entries(uiPrefs).forEach(([key, value]) => {
+        localStorage.setItem(`${key}_${userId}`, String(value))
+      })
+    }
+  } catch (e) { console.warn('[auth] ui_prefs seed failed', e) }
 
   // Reload the in-memory appConfig singleton from the freshly-seeded localStorage
   reloadConfigFromStorage()

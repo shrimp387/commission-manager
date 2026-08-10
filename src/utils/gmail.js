@@ -9,6 +9,8 @@
  *   5. sendGmail() uses the access token (auto-refreshing when expired)
  */
 
+import { saveGmailTokensDb, clearGmailTokensDb } from '../lib/db.js'
+
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET
 const REDIRECT_URI = window.location.origin
@@ -25,10 +27,12 @@ export function getGmailTokens() {
 
 export function saveGmailTokens(tokens) {
   localStorage.setItem(LS_KEY, JSON.stringify({ ...tokens, savedAt: Date.now() }))
+  saveGmailTokensDb({ ...tokens, savedAt: Date.now() }).catch(() => {})
 }
 
 export function clearGmailTokens() {
   localStorage.removeItem(LS_KEY)
+  clearGmailTokensDb().catch(() => {})
 }
 
 export function isGmailConnected() {

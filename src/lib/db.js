@@ -236,6 +236,115 @@ function genId() {
   })
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// TELEGRAM CONFIG
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function getTelegramConfig() {
+  if (useSupabase()) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('telegram_token, telegram_chat_id')
+      .eq('id', _userId)
+      .single()
+    if (data?.telegram_token) {
+      return { token: data.telegram_token, chatId: data.telegram_chat_id }
+    }
+  }
+  // Fallback: localStorage (user-scoped key)
+  const key = _userId ? `telegram_config_${_userId}` : 'telegram_config'
+  try { return JSON.parse(localStorage.getItem(key) || 'null') } catch { return null }
+}
+
+export async function saveTelegramConfig(token, chatId) {
+  if (useSupabase()) {
+    await supabase.from('profiles').upsert({
+      id: _userId,
+      telegram_token: token || null,
+      telegram_chat_id: chatId || null,
+      updated_at: new Date().toISOString(),
+    })
+  }
+  // Also keep in localStorage as cache
+  const key = _userId ? `telegram_config_${_userId}` : 'telegram_config'
+  localStorage.setItem(key, JSON.stringify({ token, chatId }))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GMAIL TOKENS
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function getGmailTokensDb() {
+  if (useSupabase()) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('gmail_tokens')
+      .eq('id', _userId)
+      .single()
+    if (data?.gmail_tokens) return data.gmail_tokens
+  }
+  try { return JSON.parse(localStorage.getItem('gmail_tokens') || 'null') } catch { return null }
+}
+
+export async function saveGmailTokensDb(tokens) {
+  if (useSupabase()) {
+    await supabase.from('profiles').upsert({
+      id: _userId,
+      gmail_tokens: tokens,
+      updated_at: new Date().toISOString(),
+    })
+  }
+  localStorage.setItem('gmail_tokens', JSON.stringify(tokens))
+}
+
+export async function clearGmailTokensDb() {
+  if (useSupabase()) {
+    await supabase.from('profiles').upsert({
+      id: _userId,
+      gmail_tokens: null,
+      updated_at: new Date().toISOString(),
+    })
+  }
+  localStorage.removeItem('gmail_tokens')
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI PREFERENCES (view mode, collapsed state, etc.)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function getUiPrefs() {
+  if (useSupabase()) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('ui_prefs')
+      .eq('id', _userId)
+      .single()
+    if (data?.ui_prefs) return data.ui_prefs
+  }
+  return {}
+}
+
+let _uiPrefsSyncTimer = null
+export function saveUiPref(key, value) {
+  // Immediate localStorage write
+  const uid = _userId || localStorage.getItem('_current_user_id') || 'default'
+  localStorage.setItem(`${key}_${uid}`, String(value))
+  // Debounced Supabase write
+  if (_uiPrefsSyncTimer) clearTimeout(_uiPrefsSyncTimer)
+  _uiPrefsSyncTimer = setTimeout(async () => {
+    if (!useSupabase()) return
+    try {
+      const { data } = await supabase.from('profiles').select('ui_prefs').eq('id', _userId).single()
+      const current = data?.ui_prefs ?? {}
+      await supabase.from('profiles').upsert({
+        id: _userId,
+        ui_prefs: { ...current, [key]: value },
+        updated_at: new Date().toISOString(),
+      })
+    } catch (e) { console.warn('[db] saveUiPref failed:', e?.message) }
+  }, 500)
+}
+
 export async function savePortfolio(items) {
   if (useSupabase()) {
     // Delete all and re-insert (simple approach for small datasets)
