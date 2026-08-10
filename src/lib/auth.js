@@ -7,10 +7,17 @@ import { supabase } from './supabase.js'
 // ── Sign in with Google ────────────────────────────────────────────────────
 export async function signInWithGoogle() {
   if (!supabase) throw new Error('Supabase not configured')
+
+  // Always redirect to the canonical production URL, not a Vercel preview URL
+  const isLocal = window.location.hostname === 'localhost'
+  const redirectTo = isLocal
+    ? window.location.origin
+    : 'https://commission-manager-plum.vercel.app'
+
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin,
+      redirectTo,
       scopes: 'email profile',
     },
   })
@@ -23,6 +30,13 @@ export async function signOut() {
   if (!supabase) return
   const { error } = await supabase.auth.signOut()
   if (error) throw error
+  // Always redirect to the canonical production URL after sign out
+  // to avoid landing on a Vercel preview URL
+  const productionUrl = 'https://commission-manager-plum.vercel.app'
+  const isLocal = window.location.hostname === 'localhost'
+  if (!isLocal) {
+    window.location.href = productionUrl
+  }
 }
 
 // ── Get current session ────────────────────────────────────────────────────
