@@ -87,15 +87,10 @@ export default function StudioPage() {
             <button onClick={reload} className="retry-btn">Reintentar</button>
           </div>
         )}
-        {syncStatus === 'offline' && (
-          <div className="sync-banner" role="status">
-            📴 Modo offline — cambios guardados localmente
-          </div>
-        )}
         {syncStatus === 'syncing' && (
           <div className="sync-banner sync-banner--syncing" role="status">
             <span className="mini-spinner" style={{ display: 'inline-block', marginRight: '0.4rem' }} />
-            Sincronizando con Taskade...
+            Sincronizando...
           </div>
         )}
 
