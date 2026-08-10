@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react'
 import { getConfig, setConfig, setConfigMulti } from '../store/appConfig.js'
 import { useConfig } from '../hooks/useConfig.js'
 import PageBackgroundEditor from '../components/PageBackgroundEditor.jsx'
+import StorageMonitor from '../components/StorageMonitor.jsx'
 
 const FONTS = [
   { label: 'Inter (default)', value: 'Inter' },
@@ -32,6 +33,7 @@ export default function SettingsPage() {
   const config = useConfig()
   const [tab, setTab] = useState('project')
   const [bgEditorPage, setBgEditorPage] = useState(null)
+  const [showStorageMonitor, setShowStorageMonitor] = useState(false)
   const bannerRef = useRef(null)
   const iconRef = useRef(null)
   const bgRef = useRef(null)
@@ -103,6 +105,7 @@ export default function SettingsPage() {
             { id: 'background', label: '🖼 Fondo' },
             { id: 'typography', label: 'Aa Tipografía' },
             { id: 'pageBgs', label: '🖼 Fondos de página' },
+            { id: 'storage', label: '🗄 Storage' },
           ].map(t => (
             <button key={t.id} className={`tab-btn ${tab === t.id ? 'tab-btn--active' : ''}`}
               onClick={() => setTab(t.id)}>{t.label}</button>
@@ -344,6 +347,45 @@ export default function SettingsPage() {
             onClose={() => setBgEditorPage(null)}
           />
         )}
+
+        {/* STORAGE TAB — monitor de Supabase, R2, localStorage */}
+        {tab === 'storage' && (
+          <div className="settings-section">
+            <h2 className="settings-h2">🗄 Storage Monitor</h2>
+            <p className="settings-desc">
+              Visualiza en tiempo real qué datos hay en cada servicio de almacenamiento.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', padding: '0.875rem', borderLeft: '3px solid var(--green)' }}>
+                <p style={{ fontWeight: 700, marginBottom: '0.25rem' }}>🗄 Supabase</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Config, tareas, solicitudes, portafolio (metadatos), archivados, guía, kanban</p>
+              </div>
+              <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', padding: '0.875rem', borderLeft: '3px solid #38bdf8' }}>
+                <p style={{ fontWeight: 700, marginBottom: '0.25rem' }}>☁ Cloudflare R2</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Imágenes de portafolio, adjuntos de comisiones, fondos de página</p>
+              </div>
+              <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', padding: '0.875rem', borderLeft: '3px solid var(--orange)' }}>
+                <p style={{ fontWeight: 700, marginBottom: '0.25rem' }}>💾 localStorage</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Solo caché temporal. Debería estar vacío cuando hay sesión activa.</p>
+              </div>
+            </div>
+
+            <button
+              className="btn-primary"
+              onClick={() => setShowStorageMonitor(true)}
+              style={{ fontSize: '0.9rem', padding: '0.6rem 1.25rem' }}
+            >
+              🔍 Abrir Storage Monitor
+            </button>
+
+            <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
+              También puedes acceder desde el botón <strong>🗄 Storage</strong> abajo a la derecha de cualquier página.
+            </p>
+          </div>
+        )}
+
+        {showStorageMonitor && <StorageMonitor onClose={() => setShowStorageMonitor(false)} />}
       </div>
     </div>
   )

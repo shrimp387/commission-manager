@@ -1,7 +1,7 @@
 /**
- * DebugPanel — mini overlay para diagnosticar aislamiento de usuarios.
- * Solo visible en desarrollo (localhost) o si ?debug=1 está en la URL.
- * Muestra: usuario actual, claves en localStorage, y si hay mezcla de datos.
+ * DebugPanel — botón flotante de diagnóstico.
+ * Visible SIEMPRE cuando hay usuario logueado (producción + local).
+ * También se activa con ?debug=1 para usuarios sin sesión.
  */
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../lib/AuthContext.jsx'
@@ -41,9 +41,12 @@ export default function DebugPanel() {
   const [showMonitor, setShowMonitor] = useState(false)
   const [snap, setSnap] = useState({})
 
+  // Visible cuando hay usuario logueado O en localhost O con ?debug=1
   const isVisible =
+    !!user ||
     window.location.hostname === 'localhost' ||
-    window.location.search.includes('debug=1')
+    window.location.search.includes('debug=1') ||
+    window.location.hash.includes('debug=1')
 
   useEffect(() => {
     if (!open) return
@@ -69,16 +72,35 @@ export default function DebugPanel() {
       position: 'fixed', bottom: 12, right: 12, zIndex: 9999,
       fontFamily: 'monospace', fontSize: 11,
     }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          background: mismatch ? '#ef4444' : '#22c55e',
-          color: '#000', border: 'none', borderRadius: 6,
-          padding: '4px 10px', cursor: 'pointer', fontWeight: 700,
-        }}
-      >
-        🔍 DEBUG {mismatch ? '⚠ MISMATCH' : ''}
-      </button>
+      {/* Botón principal — siempre visible cuando hay sesión */}
+      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+        {/* Botón directo al Storage Monitor */}
+        <button
+          onClick={() => setShowMonitor(true)}
+          title="Storage Monitor — ver qué hay en Supabase, R2 y localStorage"
+          style={{
+            background: '#0d1f2d', color: '#38bdf8',
+            border: '1px solid #38bdf840', borderRadius: 6,
+            padding: '4px 10px', cursor: 'pointer', fontWeight: 700, fontSize: 11,
+          }}
+        >
+          🗄 Storage
+        </button>
+
+        {/* Botón debug completo */}
+        <button
+          onClick={() => setOpen(o => !o)}
+          style={{
+            background: mismatch ? '#ef4444' : '#1a1a1a',
+            color: mismatch ? '#000' : '#888',
+            border: '1px solid #333', borderRadius: 6,
+            padding: '4px 8px', cursor: 'pointer', fontWeight: 700, fontSize: 11,
+          }}
+          title="Panel de debug"
+        >
+          🔍 {mismatch ? '⚠' : ''}
+        </button>
+      </div>
 
       {open && (
         <div style={{
@@ -119,16 +141,10 @@ export default function DebugPanel() {
 
           <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
             <button
-              onClick={() => setSnap({})}
+              onClick={() => { const s = {}; TRACKED_KEYS.forEach(k => { s[k] = { size: getSize(k), count: countItems(k) } }); setSnap(s) }}
               style={{ background: '#222', color: '#888', border: '1px solid #333', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontSize: 10 }}
             >
-              Refresh
-            </button>
-            <button
-              onClick={() => setShowMonitor(true)}
-              style={{ background: '#0d1f2d', color: '#38bdf8', border: '1px solid #38bdf840', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontSize: 10 }}
-            >
-              🗄 Storage Monitor
+              ↻ Refresh
             </button>
             <button
               onClick={() => {
@@ -137,7 +153,7 @@ export default function DebugPanel() {
               }}
               style={{ background: '#3a1515', color: '#ef4444', border: '1px solid #ef444440', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontSize: 10 }}
             >
-              Clear LS
+              🗑 Clear LS
             </button>
           </div>
         </div>
