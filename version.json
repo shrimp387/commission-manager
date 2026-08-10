@@ -1,7 +1,7 @@
 {
   "major": 1,
   "minor": 4,
-  "patch": 0,
+  "patch": 1,
   "history": [
     {
       "version": "v1.0.0",
@@ -56,6 +56,12 @@
       "date": "2026-08-10T10:19:19.422061",
       "message": "feat: integrar Cloudflare R2 para storage de imágenes via Worker",
       "bump": "minor"
+    },
+    {
+      "version": "v1.4.1",
+      "date": "2026-08-10T10:35:38.511420",
+      "message": "fix: corregir guardado de portfolio en Supabase con columnas storage_key y backend",
+      "bump": "patch"
     }
   ]
 }

@@ -227,6 +227,31 @@ export async function insertPublicRequest(request) {
 // PORTFOLIO
 // ═══════════════════════════════════════════════════════════════════════════
 
+export async function savePortfolio(items) {
+  if (useSupabase()) {
+    // Delete all and re-insert (simple approach for small datasets)
+    await supabase.from('portfolio_items').delete().eq('user_id', _userId)
+    if (items.length > 0) {
+      const { error } = await supabase.from('portfolio_items').insert(
+        items.map((item, i) => ({
+          id: item.id,
+          user_id: _userId,
+          url: item.url,
+          title: item.title || '',
+          description: item.description || '',
+          tags: item.tags || [],
+          storage_key: item.storageKey || null,
+          backend: item.backend || 'base64',
+          sort_order: i,
+          created_at: item.createdAt || new Date().toISOString(),
+        }))
+      )
+      if (error) console.error('[db] savePortfolio error:', error)
+    }
+  }
+  lsSet('portfolio_items', items)
+}
+
 export async function getPortfolio() {
   if (useSupabase()) {
     const { data } = await supabase
@@ -234,23 +259,21 @@ export async function getPortfolio() {
       .select('*')
       .eq('user_id', _userId)
       .order('sort_order', { ascending: true })
-    return data ?? []
+    if (data && data.length > 0) {
+      return data.map(item => ({
+        id: item.id,
+        url: item.url,
+        title: item.title || '',
+        description: item.description || '',
+        tags: item.tags || [],
+        storageKey: item.storage_key || null,
+        backend: item.backend || 'base64',
+        createdAt: item.created_at || new Date().toISOString(),
+      }))
+    }
+    return []
   }
   return lsGet('portfolio_items', [])
-}
-
-export async function savePortfolio(items) {
-  if (useSupabase()) {
-    // Delete all and re-insert (simple approach for small datasets)
-    await supabase.from('portfolio_items').delete().eq('user_id', _userId)
-    if (items.length > 0) {
-      const { error } = await supabase.from('portfolio_items').insert(
-        items.map((item, i) => ({ ...item, user_id: _userId, sort_order: i }))
-      )
-      if (error) console.error('[db] savePortfolio error:', error)
-    }
-  }
-  lsSet('portfolio_items', items)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
