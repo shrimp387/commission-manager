@@ -227,26 +227,44 @@ export async function insertPublicRequest(request) {
 // PORTFOLIO
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── UUID generator (browser-compatible) ──────────────────────────────────
+function genId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
+}
+
 export async function savePortfolio(items) {
   if (useSupabase()) {
     // Delete all and re-insert (simple approach for small datasets)
     await supabase.from('portfolio_items').delete().eq('user_id', _userId)
     if (items.length > 0) {
-      const { error } = await supabase.from('portfolio_items').insert(
-        items.map((item, i) => ({
-          id: item.id,
-          user_id: _userId,
-          url: item.url,
-          title: item.title || '',
-          description: item.description || '',
-          tags: item.tags || [],
-          storage_key: item.storageKey || null,
-          backend: item.backend || 'base64',
-          sort_order: i,
-          created_at: item.createdAt || new Date().toISOString(),
-        }))
-      )
+      // Ensure every item has a valid string ID (not a float)
+      const rows = items.map((item, i) => ({
+        id: typeof item.id === 'string' ? item.id : genId(),
+        user_id: _userId,
+        url: item.url,
+        title: item.title || '',
+        description: item.description || '',
+        tags: item.tags || [],
+        storage_key: item.storageKey || null,
+        backend: item.backend || 'base64',
+        sort_order: i,
+        created_at: item.createdAt || new Date().toISOString(),
+      }))
+      const { error } = await supabase.from('portfolio_items').insert(rows)
       if (error) console.error('[db] savePortfolio error:', error)
+      else {
+        // Update local items with the normalized string IDs
+        const normalized = items.map((item, i) => ({
+          ...item,
+          id: rows[i].id,
+        }))
+        lsSet('portfolio_items', normalized)
+        return
+      }
     }
   }
   lsSet('portfolio_items', items)

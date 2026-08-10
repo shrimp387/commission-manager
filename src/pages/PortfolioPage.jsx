@@ -154,7 +154,7 @@ export default function PortfolioPage() {
           if (isR2Available(userId)) {
             const result = await uploadToR2(file, 'portfolio', null, userId)
             if (result) return {
-              id: Date.now() + Math.random(),
+              id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
               url: result.url,
               storageKey: result.key,
               backend: 'r2',
@@ -173,7 +173,7 @@ export default function PortfolioPage() {
             if (!error) {
               const { data: signed } = await supabase.storage.from('attachments').createSignedUrl(path, 60 * 60 * 24 * 365)
               return {
-                id: Date.now() + Math.random(),
+                id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
                 url: signed?.signedUrl || '',
                 storageKey: path,
                 backend: 'supabase',
@@ -190,7 +190,7 @@ export default function PortfolioPage() {
           const base64Result = await new Promise(resolve => {
             const r = new FileReader()
             r.onload = e => resolve({
-              id: Date.now() + Math.random(),
+              id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
               url: e.target.result,
               storageKey: null,
               backend: 'base64',

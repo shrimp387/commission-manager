@@ -1,18 +1,10 @@
 /**
  * StorageMonitor — Panel de diagnóstico de almacenamiento.
- *
- * Muestra en tiempo real:
- *  • Lo que está en R2 (Cloudflare) — imágenes
- *  • Lo que está en Supabase — datos estructurados
- *  • Lo que sigue en localStorage — NO debería haber nada aquí en producción
- *
- * Solo visible cuando hay un usuario logueado (admin).
- * Actívalo con el botón "🗄 Storage" en el Debug Panel,
- * o directamente en Configuración → sección Storage Monitor.
  */
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase.js'
-import { getCurrentUserId } from '../lib/db.js'
+import { getCurrentUserId, savePortfolio } from '../lib/db.js'
+import { uploadToR2, isR2Available } from '../lib/r2.js'
 import { useAuth } from '../lib/AuthContext.jsx'
 
 const WORKER_URL = import.meta.env.VITE_R2_WORKER_URL
@@ -82,6 +74,40 @@ async function fetchR2Files(userId) {
   } catch (e) {
     return { error: e.message }
   }
+}
+
+// ── Base64 cleanup ────────────────────────────────────────────────────────
+
+function scanBase64Attachments() {
+  try {
+    const fields = JSON.parse(localStorage.getItem('task_fields') || '{}')
+    const results = []
+    for (const [taskId, data] of Object.entries(fields)) {
+      const attachments = data.attachments || []
+      const base64Atts = attachments.filter(a => a.url?.startsWith('data:'))
+      if (base64Atts.length > 0) {
+        const size = base64Atts.reduce((s, a) => s + (a.url?.length ?? 0), 0)
+        results.push({ taskId, total: attachments.length, base64Count: base64Atts.length, size })
+      }
+    }
+    return results
+  } catch { return [] }
+}
+
+function purgeBase64FromTaskFields() {
+  try {
+    const fields = JSON.parse(localStorage.getItem('task_fields') || '{}')
+    let freed = 0
+    for (const taskId of Object.keys(fields)) {
+      const atts = fields[taskId].attachments || []
+      const before = JSON.stringify(atts).length
+      const clean = atts.filter(a => !a.url?.startsWith('data:'))
+      freed += before - JSON.stringify(clean).length
+      fields[taskId].attachments = clean
+    }
+    localStorage.setItem('task_fields', JSON.stringify(fields))
+    return freed
+  } catch { return 0 }
 }
 
 // ── localStorage inspector ────────────────────────────────────────────────
@@ -243,14 +269,28 @@ function R2Tab({ data, loading, error }) {
   )
 }
 
-function LocalStorageTab({ items, onClearKey }) {
+function LocalStorageTab({ items, onClearKey, onRefresh }) {
   const leaks = items.filter(i => !i.isExpected)
   const expected = items.filter(i => i.isExpected)
-
   const totalSize = items.reduce((s, i) => s + i.size, 0)
+
+  // Base64 analysis
+  const [base64Info, setBase64Info] = useState(() => scanBase64Attachments())
+  const [purgeResult, setPurgeResult] = useState(null)
+
+  const totalBase64 = base64Info.reduce((s, r) => s + r.size, 0)
+
+  function handlePurge() {
+    if (!confirm(`¿Eliminar ${base64Info.reduce((s,r)=>s+r.base64Count,0)} adjuntos base64 del localStorage? Los archivos que están en R2 no se verán afectados.`)) return
+    const freed = purgeBase64FromTaskFields()
+    setPurgeResult(freed)
+    setBase64Info(scanBase64Attachments())
+    onRefresh?.()
+  }
 
   return (
     <div>
+      {/* Stats bar */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
         <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', padding: '0.4rem 0.75rem', fontSize: '0.72rem' }}>
           <span style={{ color: 'var(--text-muted)' }}>Total: </span>
@@ -266,6 +306,48 @@ function LocalStorageTab({ items, onClearKey }) {
           </div>
         )}
       </div>
+
+      {/* Base64 cleanup panel */}
+      {base64Info.length > 0 && (
+        <div style={{
+          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
+          borderRadius: 'var(--radius-sm)', padding: '0.75rem', marginBottom: '0.75rem',
+        }}>
+          <p style={{ fontWeight: 700, color: 'var(--red)', fontSize: '0.8rem', marginBottom: '0.35rem' }}>
+            🗑 Imágenes base64 detectadas en task_fields ({bytes(totalBase64)})
+          </p>
+          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+            Son adjuntos de tareas guardados localmente en base64. Si ya están en R2 o Supabase, pueden eliminarse del localStorage con seguridad.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginBottom: '0.5rem' }}>
+            {base64Info.map(r => (
+              <div key={r.taskId} style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                • tarea <span style={{ color: 'var(--text)' }}>{r.taskId.slice(0, 12)}…</span> — {r.base64Count} imagen{r.base64Count !== 1 ? 'es' : ''} base64 ({bytes(r.size)})
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={handlePurge}
+            style={{
+              background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
+              borderRadius: 'var(--radius-sm)', padding: '0.35rem 0.75rem',
+              cursor: 'pointer', fontSize: '0.75rem', color: '#fca5a5',
+            }}
+          >
+            🧹 Limpiar imágenes base64 del localStorage
+          </button>
+          {purgeResult !== null && (
+            <p style={{ fontSize: '0.7rem', color: 'var(--green)', marginTop: '0.35rem' }}>
+              ✓ Liberados {bytes(purgeResult)}. Recarga para ver el nuevo tamaño.
+            </p>
+          )}
+        </div>
+      )}
+      {base64Info.length === 0 && purgeResult !== null && (
+        <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 'var(--radius-sm)', padding: '0.6rem 0.75rem', marginBottom: '0.75rem', fontSize: '0.75rem', color: 'var(--green)' }}>
+          ✓ Sin imágenes base64 en localStorage. Todo limpio.
+        </div>
+      )}
 
       {/* Leaks */}
       {leaks.length > 0 && (
@@ -495,7 +577,7 @@ export default function StorageMonitor({ onClose }) {
         <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1rem' }}>
           {tab === 'supabase' && <SupabaseTab data={sbData} loading={sbLoading} error={sbError} />}
           {tab === 'r2'       && <R2Tab data={r2Data} loading={r2Loading} error={r2Error} />}
-          {tab === 'ls'       && <LocalStorageTab items={lsItems} onClearKey={clearLsKey} />}
+          {tab === 'ls'       && <LocalStorageTab items={lsItems} onClearKey={clearLsKey} onRefresh={refreshLS} />}
         </div>
 
         {/* Footer */}
