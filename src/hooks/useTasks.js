@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { SECTION_IDS } from '../config.js'
-import { setTaskField, getTaskFields } from '../store/taskStore.js'
+import { setTaskField, getTaskFields, removeTaskFromCache } from '../store/taskStore.js'
 import {
   getAllTasks as getAllLocalTasks,
   addLocalTask,
@@ -145,6 +145,7 @@ export function useTasks() {
   // ── Eliminar tarea ────────────────────────────────────────────────────
   const removeTask = useCallback(async (taskId) => {
     removeLocalTask(taskId)
+    removeTaskFromCache(taskId) // limpia task_fields de localStorage y memoria
     setRawTasks(prev => prev.filter(t => t.id !== taskId))
     setError(null)
     deleteTaskStructure(taskId)

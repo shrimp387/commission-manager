@@ -65,6 +65,17 @@ export function clearTaskStoreCache() {
   notifyData()
 }
 
+/**
+ * Removes a task's fields from the in-memory cache and localStorage.
+ * Called when a task is deleted to prevent unbounded growth of task_fields.
+ */
+export function removeTaskFromCache(taskId) {
+  if (!_cache[taskId]) return
+  delete _cache[taskId]
+  saveAll(_cache)
+  notifyData()
+}
+
 function notifyData() {
   _listeners.forEach(fn => fn({ ..._cache }))
 }

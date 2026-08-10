@@ -139,7 +139,7 @@ function Lightbox({ items, index, onClose, onPrev, onNext }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [onClose, onPrev, onNext])
 
   const item = items[index]
   if (!item) return null

@@ -34,8 +34,8 @@ La app es funcional y está lista para producción en sus funciones core. La inf
 | 2 | **`insertPublicRequest` no guarda en Supabase** — TODO en el código | `lib/db.js` | ALTA | ✅ Completado v1.7.2 |
 | 3 | **Dashboard "AVANCE PROMEDIO" hardcodeado al 30%** | `components/Dashboard.jsx` | ALTA | ✅ Completado v1.7.2 |
 | 4 | **Dashboard "ATENCIÓN HOY" = mismo valor que "ACTIVAS"** | `pages/StudioPage.jsx` | MEDIA | ✅ Completado v1.7.2 |
-| 5 | **`savePortfolio` hace delete+insert no atómico** (riesgo de pérdida de datos) | `lib/db.js` | MEDIA | ⬜ Pendiente |
-| 6 | **GuidePage guarda bloques solo a localStorage** — nunca a Supabase | `pages/GuidePage.jsx` | MEDIA | ⬜ Pendiente |
+| 5 | **`savePortfolio` hace delete+insert no atómico** (riesgo de pérdida de datos) | `lib/db.js` | MEDIA | ✅ Completado v1.7.3 |
+| 6 | **GuidePage guarda bloques solo a localStorage** — nunca a Supabase | `pages/GuidePage.jsx` | MEDIA | ✅ Completado v1.7.3 |
 
 ---
 
@@ -96,8 +96,8 @@ La app es funcional y está lista para producción en sus funciones core. La inf
 - [x] Dashboard métricas reales ✅
 
 ### Fase 2 — Deuda técnica
-- [ ] savePortfolio → upsert atómico
-- [ ] GuidePage → Supabase
+- [x] savePortfolio → upsert atómico ✅
+- [x] GuidePage → Supabase ✅
 - [ ] task_fields cleanup (remover tareas eliminadas del caché)
 - [ ] Lightbox stale closure fix
 
