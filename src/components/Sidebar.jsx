@@ -3,6 +3,9 @@ import { useConfig } from '../hooks/useConfig.js'
 import { useResizableSidebar } from '../hooks/useResizableSidebar.js'
 import ResizeHandle from './ResizeHandle.jsx'
 import ProximamentePanel from './ProximamentePanel.jsx'
+import { useAuth } from '../lib/AuthContext.jsx'
+import { signOut } from '../lib/auth.js'
+import { isSupabaseReady } from '../lib/supabase.js'
 
 const NAV_ITEMS = [
   { id: 'studio', icon: '🔭', label: 'Estudio de Comisiones' },
@@ -22,6 +25,15 @@ export default function Sidebar({ active, onNavigate, mobileOpen, onMobileClose 
   const config = useConfig()
   const { handleMouseDown, handleDoubleClick } = useResizableSidebar()
   const [activePanel, setActivePanel] = useState(null)
+  const { user } = useAuth()
+
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Admin'
+  const avatarLetter = displayName[0].toUpperCase()
+  const avatarUrl = user?.user_metadata?.avatar_url
+
+  async function handleSignOut() {
+    try { await signOut() } catch {}
+  }
   return (
     <aside className={`sidebar ${mobileOpen ? 'sidebar--open' : ''}`} aria-label="Navegación principal">
       {/* Brand */}
@@ -120,8 +132,19 @@ export default function Sidebar({ active, onNavigate, mobileOpen, onMobileClose 
           <span className="sidebar-item-label">Configuración</span>
         </button>
         <div className="sidebar-user">
-          <div className="sidebar-avatar" aria-hidden="true">A</div>
-          <span className="sidebar-username">Admin</span>
+          {avatarUrl
+            ? <img src={avatarUrl} alt={displayName} className="sidebar-avatar" style={{ objectFit: 'cover', borderRadius: '50%' }} />
+            : <div className="sidebar-avatar" aria-hidden="true">{avatarLetter}</div>
+          }
+          <span className="sidebar-username" title={user?.email}>{displayName}</span>
+          {isSupabaseReady() && user && (
+            <button
+              className="sidebar-signout"
+              onClick={handleSignOut}
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+            >↩</button>
+          )}
         </div>
       </div>
       <ResizeHandle onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} />

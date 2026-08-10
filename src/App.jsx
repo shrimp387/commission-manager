@@ -6,9 +6,12 @@ import PortfolioPage from './pages/PortfolioPage.jsx'
 import GuidePage from './pages/GuidePage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
 import ConnectionsPage from './pages/ConnectionsPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
 import { applyConfig, getConfig } from './store/appConfig.js'
 import { usePageBackground } from './hooks/usePageBackground.js'
 import { handleOAuthRedirect } from './utils/gmail.js'
+import { AuthProvider, useAuth } from './lib/AuthContext.jsx'
+import { isSupabaseReady } from './lib/supabase.js'
 import './styles/global.css'
 
 import ArchivedPage from './pages/ArchivedPage.jsx'
@@ -23,28 +26,37 @@ const PAGES = {
   connections: ConnectionsPage,
 }
 
-export default function App() {
+function AppShell() {
   const [activePage, setActivePage] = useState('studio')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { user, loading, isLoggedIn } = useAuth()
 
   // Apply saved config on mount
   useEffect(() => { applyConfig() }, [])
 
-  // Handle Google OAuth redirect on mount
+  // Handle Google OAuth redirect on mount (Gmail OAuth)
   useEffect(() => {
-    // Only run if there's actually an OAuth code in the URL
     if (!window.location.search.includes('code=')) return
     handleOAuthRedirect().then(result => {
-      if (result.ok) {
-        setActivePage('connections')
-      }
-    }).catch(() => {
-      // OAuth failed silently, stay on current page
-    })
+      if (result.ok) setActivePage('connections')
+    }).catch(() => {})
   }, [])
 
-  // Reactively apply the correct background to .app-main on page/config change
   usePageBackground(activePage)
+
+  // Show loading spinner while checking auth
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg)' }}>
+        <div className="mini-spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+      </div>
+    )
+  }
+
+  // Show login page if Supabase is ready but user is not logged in
+  if (isSupabaseReady() && !isLoggedIn) {
+    return <LoginPage />
+  }
 
   const Page = PAGES[activePage] ?? StudioPage
 
@@ -57,7 +69,6 @@ export default function App() {
         onMobileClose={() => setSidebarOpen(false)}
       />
 
-      {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="sidebar-overlay"
@@ -67,7 +78,6 @@ export default function App() {
       )}
 
       <main className="app-main">
-        {/* Mobile hamburger */}
         <button
           className="hamburger"
           onClick={() => setSidebarOpen(true)}
@@ -75,9 +85,16 @@ export default function App() {
         >
           ☰
         </button>
-
         <Page />
       </main>
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   )
 }
