@@ -11,19 +11,25 @@ export default function StudioPage() {
   const { sections, loading, error, syncStatus, reload, toggleTask, addCommission, removeTask, renameTask, moveTask } = useTasks()
   const { saveStatus } = useTaskStore()
   const config = useConfig()
-  const [view, setView] = useState(() => localStorage.getItem('studio_view_mode') || 'list') // 'list' | 'board'
+
+  // User-scoped view preference — avoid leaking between users on the same browser
+  const userId = localStorage.getItem('_current_user_id') || 'default'
+  const viewKey = `studio_view_mode_${userId}`
+  const collapseKey = `studio_header_collapsed_${userId}`
+
+  const [view, setView] = useState(() => localStorage.getItem(viewKey) || 'list')
   const [showNew, setShowNew] = useState(false)
-  const [headerCollapsed, setHeaderCollapsed] = useState(() => localStorage.getItem('studio_header_collapsed') === 'true')
+  const [headerCollapsed, setHeaderCollapsed] = useState(() => localStorage.getItem(collapseKey) === 'true')
 
   function toggleHeader() {
     const next = !headerCollapsed
     setHeaderCollapsed(next)
-    localStorage.setItem('studio_header_collapsed', String(next))
+    localStorage.setItem(collapseKey, String(next))
   }
 
   function handleSetView(v) {
     setView(v)
-    localStorage.setItem('studio_view_mode', v)
+    localStorage.setItem(viewKey, v)
   }
 
   const allItems = sections.flatMap(s => s.items)

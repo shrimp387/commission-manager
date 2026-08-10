@@ -9,6 +9,7 @@ import StickerPanel from './StickerPanel.jsx'
 import { getTelegramConfig, getTelegramFileUrl } from '../utils/telegram.js'
 import { isGmailConnected, sendDeliveryEmail } from '../utils/gmail.js'
 import { getConfig } from '../store/appConfig.js'
+import { saveKanbanConfig } from '../lib/db.js'
 
 /* ─── STICKER QUICK BUTTON ──────────────────────────────────────── */
 // Sits below the card reactions — a quick 🎭 button
@@ -767,7 +768,6 @@ export default function KanbanBoard({ sections, loading, onToggle, onDelete, onA
     catch { return {} }
   })
 
-  // Color overrides for ALL sections (fixed + custom)
   const [colorOverrides, setColorOverrides] = useState(() => {
     try { return JSON.parse(localStorage.getItem('kanban_colors') || '{}') }
     catch { return {} }
@@ -778,9 +778,26 @@ export default function KanbanBoard({ sections, loading, onToggle, onDelete, onA
     catch { return [] }
   })
 
+  // ── Persist kanban config to BOTH localStorage AND Supabase ──────────────
+  function persistKanban({ order, colors, custom, labels }) {
+    const current = {
+      orderOverrides: order ?? orderOverrides,
+      colorOverrides: colors ?? colorOverrides,
+      customSections: custom ?? customSections,
+      labelOverrides: labels ?? JSON.parse(localStorage.getItem('kanban_labels') || '{}'),
+    }
+    // localStorage (immediate, for local reads)
+    localStorage.setItem('kanban_order', JSON.stringify(current.orderOverrides))
+    localStorage.setItem('kanban_colors', JSON.stringify(current.colorOverrides))
+    localStorage.setItem('kanban_custom_sections', JSON.stringify(current.customSections))
+    localStorage.setItem('kanban_labels', JSON.stringify(current.labelOverrides))
+    // Supabase (fire-and-forget)
+    saveKanbanConfig(current).catch(e => console.warn('[kanban] Supabase sync failed:', e?.message))
+  }
+
   function saveCustomSections(updated) {
     setCustomSections(updated)
-    localStorage.setItem('kanban_custom_sections', JSON.stringify(updated))
+    persistKanban({ custom: updated })
   }
 
   function handleDrop(e, targetSectionId) {
@@ -793,31 +810,23 @@ export default function KanbanBoard({ sections, loading, onToggle, onDelete, onA
   function handleReorder(sectionId, newOrder) {
     const updated = { ...orderOverrides, [sectionId]: newOrder }
     setOrderOverrides(updated)
-    localStorage.setItem('kanban_order', JSON.stringify(updated))
+    persistKanban({ order: updated })
   }
 
-  // Recolor — works for both fixed and custom sections
   function handleRecolor(sectionId, color) {
-    const updated = { ...colorOverrides, [sectionId]: color }
-    setColorOverrides(updated)
-    localStorage.setItem('kanban_colors', JSON.stringify(updated))
-    // Also update custom sections if applicable
-    setCustomSections(prev => prev.map(s => s.id === sectionId ? { ...s, color } : s))
-    localStorage.setItem('kanban_custom_sections', JSON.stringify(
-      customSections.map(s => s.id === sectionId ? { ...s, color } : s)
-    ))
+    const updatedColors = { ...colorOverrides, [sectionId]: color }
+    setColorOverrides(updatedColors)
+    const updatedCustom = customSections.map(s => s.id === sectionId ? { ...s, color } : s)
+    setCustomSections(updatedCustom)
+    persistKanban({ colors: updatedColors, custom: updatedCustom })
   }
 
-  // Rename section (fixed or custom label)
   function handleRenameSection(sectionId, newLabel) {
-    // For custom sections, update in localStorage
-    const updated = customSections.map(s => s.id === sectionId ? { ...s, label: newLabel } : s)
-    setCustomSections(updated)
-    localStorage.setItem('kanban_custom_sections', JSON.stringify(updated))
-    // For fixed sections, store label override
+    const updatedCustom = customSections.map(s => s.id === sectionId ? { ...s, label: newLabel } : s)
+    setCustomSections(updatedCustom)
     const labelOverrides = JSON.parse(localStorage.getItem('kanban_labels') || '{}')
     labelOverrides[sectionId] = newLabel
-    localStorage.setItem('kanban_labels', JSON.stringify(labelOverrides))
+    persistKanban({ custom: updatedCustom, labels: labelOverrides })
   }
 
   const [showNewSectionForm, setShowNewSectionForm] = useState(false)

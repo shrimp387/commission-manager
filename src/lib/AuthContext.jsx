@@ -5,7 +5,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase, isSupabaseReady } from './supabase.js'
 import { onAuthStateChange } from './auth.js'
-import { setCurrentUserId, getAllTasks, getProfile, getPortfolio, getGuide, getKanbanConfig } from './db.js'
+import { setCurrentUserId, getAllTasks, getProfile, getPortfolio, getGuide, getKanbanConfig, getRequests } from './db.js'
 import { initTaskFields, seedTaskFields, clearTaskStoreCache } from '../store/taskStore.js'
 import { reloadConfigFromStorage } from '../store/appConfig.js'
 
@@ -108,6 +108,18 @@ async function seedLocalStoreFromSupabase(userId) {
     if (Object.keys(kanban.colorOverrides || {}).length) localStorage.setItem('kanban_colors', JSON.stringify(kanban.colorOverrides))
     if (Object.keys(kanban.labelOverrides || {}).length) localStorage.setItem('kanban_labels', JSON.stringify(kanban.labelOverrides))
   } catch (e) { console.warn('[auth] kanban seed failed', e) }
+
+  // Pre-load commission requests into localStorage cache
+  try {
+    const requests = await getRequests()
+    if (requests?.length > 0) localStorage.setItem('commission_requests', JSON.stringify(requests))
+  } catch (e) { console.warn('[auth] requests seed failed', e) }
+
+  // Pre-load studio guide into localStorage cache
+  try {
+    const guide = await getGuide()
+    if (guide) localStorage.setItem('studio_guide', JSON.stringify(guide))
+  } catch (e) { console.warn('[auth] guide seed failed', e) }
 
   // Reload the in-memory appConfig singleton from the freshly-seeded localStorage
   reloadConfigFromStorage()
