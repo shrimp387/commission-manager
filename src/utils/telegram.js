@@ -24,16 +24,23 @@ export async function getTelegramFileUrl(token, fileId) {
   return null
 }
 
+import { getCurrentUserId } from '../lib/db.js'
+
+function getTelegramLsKey() {
+  const uid = getCurrentUserId()
+  return uid ? `telegram_config_${uid}` : 'telegram_config'
+}
+
 export function getTelegramConfig() {
   try {
-    return JSON.parse(localStorage.getItem('telegram_config') || 'null')
+    return JSON.parse(localStorage.getItem(getTelegramLsKey()) || 'null')
   } catch {
     return null
   }
 }
 
 export function saveTelegramConfig(token, chatId) {
-  localStorage.setItem('telegram_config', JSON.stringify({ token, chatId }))
+  localStorage.setItem(getTelegramLsKey(), JSON.stringify({ token, chatId }))
 }
 
 export async function sendTelegramNotification(request) {

@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { getPortfolio, savePortfolio } from '../lib/db.js'
+import { supabase } from '../lib/supabase.js'
+import { getCurrentUserId } from '../lib/db.js'
 
 function PortfolioItem({ item, index, onEdit, onDelete, onOpen, onDragStart, onDragOver, onDrop }) {
   const [hover, setHover] = useState(false)
@@ -114,9 +117,7 @@ function Lightbox({ items, index, onClose, onPrev, onNext }) {
 }
 
 export default function PortfolioPage() {
-  const [items, setItems] = useState(() =>
-    JSON.parse(localStorage.getItem('portfolio_items') || '[]')
-  )
+  const [items, setItems] = useState([])
   const [editIndex, setEditIndex] = useState(null)
   const [lightboxIndex, setLightboxIndex] = useState(null)
   const [activeTag, setActiveTag] = useState(null)
@@ -124,27 +125,62 @@ export default function PortfolioPage() {
   const [dragIndex, setDragIndex] = useState(null)
   const fileInputRef = useRef(null)
 
-  function save(updated) {
+  // Load from Supabase/localStorage on mount
+  useEffect(() => {
+    getPortfolio().then(data => {
+      if (data && data.length > 0) setItems(data)
+      else setItems(JSON.parse(localStorage.getItem('portfolio_items') || '[]'))
+    }).catch(() => {
+      setItems(JSON.parse(localStorage.getItem('portfolio_items') || '[]'))
+    })
+  }, [])
+
+  async function save(updated) {
     setItems(updated)
-    localStorage.setItem('portfolio_items', JSON.stringify(updated))
+    await savePortfolio(updated)
   }
 
-  function handleFiles(files) {
-    const readers = Array.from(files)
-      .filter(f => f.type.startsWith('image/'))
-      .map(file => new Promise(resolve => {
-        const r = new FileReader()
-        r.onload = e => resolve({
-          id: Date.now() + Math.random(),
-          url: e.target.result,
-          title: file.name.replace(/\.[^.]+$/, ''),
-          description: '',
-          tags: [],
-          createdAt: new Date().toISOString(),
+  async function handleFiles(files) {
+    const userId = getCurrentUserId()
+    const newImgs = await Promise.all(
+      Array.from(files)
+        .filter(f => f.type.startsWith('image/'))
+        .map(async file => {
+          // Try to upload to Supabase Storage first
+          if (supabase && userId) {
+            const ext = file.name.split('.').pop()
+            const path = `${userId}/portfolio/${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`
+            const { error } = await supabase.storage.from('attachments').upload(path, file, { contentType: file.type })
+            if (!error) {
+              const { data: signed } = await supabase.storage.from('attachments').createSignedUrl(path, 60 * 60 * 24 * 365)
+              return {
+                id: Date.now() + Math.random(),
+                url: signed?.signedUrl || '',
+                storageKey: path,
+                title: file.name.replace(/\.[^.]+$/, ''),
+                description: '',
+                tags: [],
+                createdAt: new Date().toISOString(),
+              }
+            }
+          }
+          // Fallback: base64
+          return new Promise(resolve => {
+            const r = new FileReader()
+            r.onload = e => resolve({
+              id: Date.now() + Math.random(),
+              url: e.target.result,
+              storageKey: null,
+              title: file.name.replace(/\.[^.]+$/, ''),
+              description: '',
+              tags: [],
+              createdAt: new Date().toISOString(),
+            })
+            r.readAsDataURL(file)
+          })
         })
-        r.readAsDataURL(file)
-      }))
-    Promise.all(readers).then(imgs => save([...items, ...imgs]))
+    )
+    save([...items, ...newImgs])
   }
 
   function handleDelete(index) {

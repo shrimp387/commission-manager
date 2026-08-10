@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react'
-import { getArchived, removeArchived, updateArchivedTags } from '../store/archiveDb.js'
+import React, { useState, useMemo, useEffect } from 'react'
+import { getArchived, removeArchived, updateArchivedTags, loadArchivedFromSupabase } from '../store/archiveDb.js'
 import { PRIORITY_OPTIONS, STAGE_OPTIONS } from '../config.js'
 
 const STATUS_ALL = 'all'
@@ -44,6 +44,13 @@ export default function ArchivedPage() {
   const [filterStage, setFilterStage] = useState(STATUS_ALL)
   const [filterPriority, setFilterPriority] = useState(STATUS_ALL)
   const [selected, setSelected] = useState(null)
+
+  // Load from Supabase on mount (source of truth for user-scoped data)
+  useEffect(() => {
+    loadArchivedFromSupabase().then(data => {
+      if (data && data.length > 0) setItems(data)
+    }).catch(() => {})
+  }, [])
 
   function refresh() {
     const all = getArchived()

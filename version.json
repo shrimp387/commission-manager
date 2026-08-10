@@ -1,7 +1,7 @@
 {
   "major": 1,
   "minor": 2,
-  "patch": 1,
+  "patch": 2,
   "history": [
     {
       "version": "v1.0.0",
@@ -37,6 +37,12 @@
       "version": "v1.2.1",
       "date": "2026-08-10T08:46:39.271657",
       "message": "fix: guardado de profile",
+      "bump": "patch"
+    },
+    {
+      "version": "v1.2.2",
+      "date": "2026-08-10T09:26:17.853111",
+      "message": "fix: aislar archivados, portafolio, telegram y gmail por usuario + sync con Supabase",
       "bump": "patch"
     }
   ]

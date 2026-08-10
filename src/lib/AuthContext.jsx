@@ -26,6 +26,7 @@ const USER_SCOPED_LS_KEYS = [
   'page_backgrounds',
   'stickers',
   'archived_commissions',
+  'gmail_tokens',
 ]
 
 function clearUserScopedStorage() {
