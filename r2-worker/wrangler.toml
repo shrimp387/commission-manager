@@ -1,0 +1,10 @@
+name = "commission-manager-r2"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "commission-manager"
+
+[vars]
+R2_PUBLIC_URL = "https://pub-cfdb41a0636f400c85099a679732f4c0.r2.dev"

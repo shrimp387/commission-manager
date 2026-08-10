@@ -1,7 +1,7 @@
 {
   "major": 1,
-  "minor": 2,
-  "patch": 2,
+  "minor": 3,
+  "patch": 0,
   "history": [
     {
       "version": "v1.0.0",
@@ -44,6 +44,12 @@
       "date": "2026-08-10T09:26:17.853111",
       "message": "fix: aislar archivados, portafolio, telegram y gmail por usuario + sync con Supabase",
       "bump": "patch"
+    },
+    {
+      "version": "v1.3.0",
+      "date": "2026-08-10T10:16:56.673536",
+      "message": "feat: integrar Cloudflare R2 para storage de imágenes via Worker",
+      "bump": "minor"
     }
   ]
 }

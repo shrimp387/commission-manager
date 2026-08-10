@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { getPortfolio, savePortfolio } from '../lib/db.js'
+import { uploadToR2, deleteFromR2, isR2Available } from '../lib/r2.js'
 import { supabase } from '../lib/supabase.js'
 import { getCurrentUserId } from '../lib/db.js'
 
@@ -146,7 +147,22 @@ export default function PortfolioPage() {
       Array.from(files)
         .filter(f => f.type.startsWith('image/'))
         .map(async file => {
-          // Try to upload to Supabase Storage first
+          // Try R2 first
+          if (isR2Available()) {
+            const result = await uploadToR2(file, 'portfolio', null)
+            if (result) return {
+              id: Date.now() + Math.random(),
+              url: result.url,
+              storageKey: result.key,
+              backend: 'r2',
+              title: file.name.replace(/\.[^.]+$/, ''),
+              description: '',
+              tags: [],
+              createdAt: new Date().toISOString(),
+            }
+          }
+
+          // Fallback: Supabase Storage
           if (supabase && userId) {
             const ext = file.name.split('.').pop()
             const path = `${userId}/portfolio/${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`
@@ -157,6 +173,7 @@ export default function PortfolioPage() {
                 id: Date.now() + Math.random(),
                 url: signed?.signedUrl || '',
                 storageKey: path,
+                backend: 'supabase',
                 title: file.name.replace(/\.[^.]+$/, ''),
                 description: '',
                 tags: [],
@@ -164,13 +181,15 @@ export default function PortfolioPage() {
               }
             }
           }
-          // Fallback: base64
+
+          // Final fallback: base64
           return new Promise(resolve => {
             const r = new FileReader()
             r.onload = e => resolve({
               id: Date.now() + Math.random(),
               url: e.target.result,
               storageKey: null,
+              backend: 'base64',
               title: file.name.replace(/\.[^.]+$/, ''),
               description: '',
               tags: [],
@@ -185,6 +204,11 @@ export default function PortfolioPage() {
 
   function handleDelete(index) {
     if (!confirm('¿Eliminar esta imagen del portafolio?')) return
+    const item = items[index]
+    if (item.storageKey) {
+      if (item.backend === 'r2') deleteFromR2(item.storageKey)
+      else if (item.backend === 'supabase' && supabase) supabase.storage.from('attachments').remove([item.storageKey])
+    }
     save(items.filter((_, i) => i !== index))
   }
 

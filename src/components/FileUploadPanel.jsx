@@ -1,50 +1,36 @@
 import React, { useRef, useState } from 'react'
+import { uploadToR2, deleteFromR2, isR2Available } from '../lib/r2.js'
 import { supabase } from '../lib/supabase.js'
 import { getCurrentUserId } from '../lib/db.js'
 
 /**
- * Uploads a file to Supabase Storage under `attachments/<userId>/<taskId>/<filename>`.
- * Falls back to base64 DataURL if Supabase is not available.
+ * Uploads a file — tries R2 first, falls back to Supabase Storage, then base64.
  */
-async function uploadToStorage(file, taskId) {
+async function uploadFile(file, taskId) {
+  // Try R2 first
+  if (isR2Available()) {
+    const result = await uploadToR2(file, `attachments/${taskId}`, null)
+    if (result) return { url: result.url, storageKey: result.key, backend: 'r2' }
+  }
+
+  // Fallback: Supabase Storage
   const userId = getCurrentUserId()
-  if (!supabase || !userId) {
-    // Fallback: base64 in memory
-    return new Promise(resolve => {
-      const r = new FileReader()
-      r.onload = e => resolve({ url: e.target.result, storageKey: null })
-      r.readAsDataURL(file)
-    })
+  if (supabase && userId) {
+    const ext = file.name.split('.').pop()
+    const path = `${userId}/${taskId}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`
+    const { error } = await supabase.storage.from('attachments').upload(path, file, { contentType: file.type })
+    if (!error) {
+      const { data: signed } = await supabase.storage.from('attachments').createSignedUrl(path, 60 * 60 * 24 * 365)
+      return { url: signed?.signedUrl || '', storageKey: path, backend: 'supabase' }
+    }
   }
 
-  const ext = file.name.split('.').pop()
-  const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`
-  const path = `${userId}/${taskId}/${fileName}`
-
-  const { error } = await supabase.storage
-    .from('attachments')
-    .upload(path, file, { contentType: file.type, upsert: false })
-
-  if (error) {
-    console.warn('[storage] upload failed, falling back to base64:', error.message)
-    // Fallback to base64
-    return new Promise(resolve => {
-      const r = new FileReader()
-      r.onload = e => resolve({ url: e.target.result, storageKey: null })
-      r.readAsDataURL(file)
-    })
-  }
-
-  const { data } = supabase.storage.from('attachments').getPublicUrl(path)
-  // Use signed URL approach for private buckets
-  const { data: signedData } = await supabase.storage
-    .from('attachments')
-    .createSignedUrl(path, 60 * 60 * 24 * 365) // 1 year
-
-  return {
-    url: signedData?.signedUrl || data?.publicUrl || '',
-    storageKey: path,
-  }
+  // Final fallback: base64
+  return new Promise(resolve => {
+    const r = new FileReader()
+    r.onload = e => resolve({ url: e.target.result, storageKey: null, backend: 'base64' })
+    r.readAsDataURL(file)
+  })
 }
 
 export default function FileUploadPanel({ attachments, onChange, taskId }) {
@@ -56,12 +42,13 @@ export default function FileUploadPanel({ attachments, onChange, taskId }) {
     try {
       const newFiles = await Promise.all(
         Array.from(files).map(async file => {
-          const { url, storageKey } = await uploadToStorage(file, taskId || 'unknown')
+          const { url, storageKey, backend } = await uploadFile(file, taskId || 'unknown')
           return {
             id: Date.now() + Math.random(),
             name: file.name,
             url,
             storageKey: storageKey || null,
+            backend: backend || 'base64',
             type: file.type,
             size: file.size,
             addedAt: new Date().toISOString(),
@@ -75,9 +62,13 @@ export default function FileUploadPanel({ attachments, onChange, taskId }) {
   }
 
   async function remove(attachment) {
-    // Delete from Supabase Storage if it was uploaded there
-    if (attachment.storageKey && supabase) {
-      await supabase.storage.from('attachments').remove([attachment.storageKey])
+    // Delete from R2 or Supabase Storage
+    if (attachment.storageKey) {
+      if (attachment.backend === 'r2') {
+        await deleteFromR2(attachment.storageKey)
+      } else if (attachment.backend === 'supabase' && supabase) {
+        await supabase.storage.from('attachments').remove([attachment.storageKey])
+      }
     }
     onChange(attachments.filter(a => a.id !== attachment.id))
   }
