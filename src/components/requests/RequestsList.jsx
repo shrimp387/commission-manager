@@ -10,6 +10,7 @@ import {
 import { getConfig } from '../../store/appConfig.js'
 import { setTaskField } from '../../store/taskStore.js'
 import AcceptCommissionModal from './AcceptCommissionModal.jsx'
+import { getRequests, saveRequest } from '../../lib/db.js'
 
 const STATUS_COLORS = {
   pending: '#F59E0B',
@@ -44,13 +45,21 @@ export default function RequestsList() {
   }, [])
 
   useEffect(() => {
-    const data = JSON.parse(localStorage.getItem('commission_requests') || '[]')
-    setRequests(data)
+    // Load from Supabase first, fallback to localStorage
+    getRequests().then(data => {
+      if (data && data.length > 0) setRequests(data)
+      else setRequests(JSON.parse(localStorage.getItem('commission_requests') || '[]'))
+    }).catch(() => {
+      setRequests(JSON.parse(localStorage.getItem('commission_requests') || '[]'))
+    })
   }, [])
 
-  function saveRequests(updated) {
+  async function saveRequests(updated) {
     setRequests(updated)
-    localStorage.setItem('commission_requests', JSON.stringify(updated))
+    // Save each changed item to Supabase + localStorage
+    for (const req of updated) {
+      await saveRequest(req)
+    }
   }
 
   async function handleAccept(req) {

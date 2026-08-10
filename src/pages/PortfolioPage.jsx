@@ -132,8 +132,17 @@ export default function PortfolioPage() {
   // Load from Supabase/localStorage — re-runs when user changes (login/logout)
   useEffect(() => {
     getPortfolio().then(data => {
-      if (data && data.length > 0) setItems(data)
-      else setItems(JSON.parse(localStorage.getItem('portfolio_items') || '[]'))
+      if (data && data.length > 0) {
+        setItems(data)
+      } else {
+        // Supabase vacío — intenta recuperar desde localStorage
+        const lsItems = JSON.parse(localStorage.getItem('portfolio_items') || '[]')
+        if (lsItems.length > 0) {
+          setItems(lsItems)
+          // Re-sync to Supabase now that session is active
+          savePortfolio(lsItems).catch(e => console.warn('[portfolio] re-sync failed:', e))
+        }
+      }
     }).catch(() => {
       setItems(JSON.parse(localStorage.getItem('portfolio_items') || '[]'))
     })

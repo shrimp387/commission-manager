@@ -141,8 +141,12 @@ function isExpectedKey(key) {
   if (EXPECTED_LS_KEYS.has(key)) return true
   // Supabase auth token — normal, stored by Supabase JS SDK
   if (/^sb-.+-auth-token$/.test(key)) return true
-  // user-scoped backups like local_tasks_<uuid>
+  // user-scoped backups like local_tasks_<uuid>, task_fields_<uuid>
   if (/^(local_tasks|task_fields|archived_commissions)_[a-f0-9-]{36}$/.test(key)) return true
+  // user-scoped UI prefs: studio_view_mode_<uuid>, studio_header_collapsed_<uuid>
+  if (/^studio_(view_mode|header_collapsed)_[a-f0-9-]{36}$/.test(key)) return true
+  // user-scoped telegram config: telegram_config_<uuid>
+  if (/^telegram_config_[a-f0-9-]{36}$/.test(key)) return true
   return false
 }
 
