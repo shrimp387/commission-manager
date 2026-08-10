@@ -34,9 +34,14 @@ function AppShell() {
   // Apply saved config on mount
   useEffect(() => { applyConfig() }, [])
 
-  // Handle Google OAuth redirect on mount (Gmail OAuth)
+  // Handle Google OAuth redirect on mount (Gmail OAuth only)
+  // Only intercept the code if we explicitly started a Gmail OAuth flow
+  // (signaled by the 'gmail_oauth_return' key in sessionStorage).
+  // Supabase login callbacks must NOT be intercepted here — Supabase handles
+  // them internally via its own listener in AuthContext.
   useEffect(() => {
     if (!window.location.search.includes('code=')) return
+    if (!sessionStorage.getItem('gmail_oauth_return')) return  // not a Gmail flow
     handleOAuthRedirect().then(result => {
       if (result.ok) setActivePage('connections')
     }).catch(() => {})
