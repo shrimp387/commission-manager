@@ -11,6 +11,9 @@ import LoginPage from './pages/LoginPage.jsx'
 import ArchivedPage from './pages/ArchivedPage.jsx'
 import ClientsPage from './pages/ClientsPage.jsx'
 import CalendarPage from './pages/CalendarPage.jsx'
+import MediaPage from './pages/MediaPage.jsx'
+import IntegrationsPage from './pages/IntegrationsPage.jsx'
+import StatsPage from './pages/StatsPage.jsx'
 import DebugPanel from './components/DebugPanel.jsx'
 import DeadlineNotifier from './components/DeadlineNotifier.jsx'
 import { applyConfig } from './store/appConfig.js'
@@ -31,6 +34,9 @@ const ROUTE_TO_PAGE = {
   '/connections': 'connections',
   '/clients': 'clients',
   '/calendar': 'calendar',
+  '/media': 'media',
+  '/integrations': 'integrations',
+  '/stats': 'stats',
 }
 
 const PAGE_TO_ROUTE = {
@@ -43,6 +49,9 @@ const PAGE_TO_ROUTE = {
   connections: '/connections',
   clients: '/clients',
   calendar: '/calendar',
+  media: '/media',
+  integrations: '/integrations',
+  stats: '/stats',
 }
 
 function AppShell() {
@@ -106,6 +115,9 @@ function AppShell() {
           <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/clients"     element={<ClientsPage />} />
           <Route path="/calendar"    element={<CalendarPage />} />
+          <Route path="/media"        element={<MediaPage />} />
+          <Route path="/integrations" element={<IntegrationsPage />} />
+          <Route path="/stats"        element={<StatsPage />} />
           <Route path="*"            element={<Navigate to="/studio" replace />} />
         </Routes>
       </main>

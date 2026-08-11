@@ -92,51 +92,33 @@ export default function Sidebar({ active, onNavigate, mobileOpen, onMobileClose 
         ))}
       </nav>
 
-      {/* Connections + Placeholders */}
+      {/* Connections + Additional pages */}
       <nav className="sidebar-nav sidebar-nav--placeholders" aria-label="Funciones adicionales">
-        {/* Connections — active */}
+        {/* Connections */}
         <button
           className={`sidebar-item sidebar-item--connections ${active === 'connections' ? 'sidebar-item--active' : ''}`}
           onClick={() => onNavigate('connections')}
           aria-current={active === 'connections' ? 'page' : undefined}
-          title="Conexiones — Telegram y Google"
         >
           <span className="sidebar-item-icon" aria-hidden="true">🔌</span>
           <span className="sidebar-item-label">Conexiones</span>
           <span className="sidebar-item-badge" aria-hidden="true">Nuevo</span>
         </button>
 
-        {/* Medios de comunicación — placeholder */}
-        <button
-          className="sidebar-item sidebar-item--placeholder"
-          onClick={() => setActivePanel({ icon: '💬', label: 'Medios de comunicación', description: 'Gestiona todos tus canales de comunicación con clientes desde aquí.' })}
-          title="Próximamente"
-        >
+        <button className={`sidebar-item ${active === 'media' ? 'sidebar-item--active' : ''}`} onClick={() => onNavigate('media')} aria-current={active === 'media' ? 'page' : undefined}>
           <span className="sidebar-item-icon" aria-hidden="true">💬</span>
           <span className="sidebar-item-label">Medios de comunicación</span>
         </button>
 
-        {/* Integraciones — placeholder */}
-        <button
-          className="sidebar-item sidebar-item--placeholder"
-          onClick={() => setActivePanel({ icon: '🔗', label: 'Integraciones', description: 'Conecta herramientas externas como Notion, Google Drive y más.' })}
-          title="Próximamente"
-        >
+        <button className={`sidebar-item ${active === 'integrations' ? 'sidebar-item--active' : ''}`} onClick={() => onNavigate('integrations')} aria-current={active === 'integrations' ? 'page' : undefined}>
           <span className="sidebar-item-icon" aria-hidden="true">🔗</span>
           <span className="sidebar-item-label">Integraciones</span>
         </button>
 
-        {PLACEHOLDER_ITEMS.map(item => (
-          <button
-            key={item.label}
-            className="sidebar-item sidebar-item--placeholder"
-            onClick={() => setActivePanel(item)}
-            title="Próximamente"
-          >
-            <span className="sidebar-item-icon" aria-hidden="true">{item.icon}</span>
-            <span className="sidebar-item-label">{item.label}</span>
-          </button>
-        ))}
+        <button className={`sidebar-item ${active === 'stats' ? 'sidebar-item--active' : ''}`} onClick={() => onNavigate('stats')} aria-current={active === 'stats' ? 'page' : undefined}>
+          <span className="sidebar-item-icon" aria-hidden="true">🧬</span>
+          <span className="sidebar-item-label">Mapa DNA</span>
+        </button>
       </nav>
 
       {/* Footer with settings */}
