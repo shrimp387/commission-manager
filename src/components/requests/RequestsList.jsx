@@ -11,6 +11,7 @@ import { getConfig } from '../../store/appConfig.js'
 import { setTaskField } from '../../store/taskStore.js'
 import AcceptCommissionModal from './AcceptCommissionModal.jsx'
 import { getRequests, saveRequest } from '../../lib/db.js'
+import { findOrCreateClientFromRequest } from '../../lib/clientsDb.js'
 
 const STATUS_COLORS = {
   pending: '#F59E0B',
@@ -90,6 +91,10 @@ export default function RequestsList() {
         setTaskField(taskId, 'commissionRequestId', req.id)
         setTaskField(taskId, 'paymentDetails', paymentDetails)
       }
+
+      // Create/update client record automatically
+      const reqWithPayment = { ...req, paymentDetails }
+      findOrCreateClientFromRequest(reqWithPayment).catch(() => {})
 
       const updated = requests.map(r =>
         r.id === req.id ? { ...r, status: 'accepted', paymentDetails } : r

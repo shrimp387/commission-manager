@@ -9,6 +9,7 @@ import SettingsPage from './pages/SettingsPage.jsx'
 import ConnectionsPage from './pages/ConnectionsPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import ArchivedPage from './pages/ArchivedPage.jsx'
+import ClientsPage from './pages/ClientsPage.jsx'
 import DebugPanel from './components/DebugPanel.jsx'
 import DeadlineNotifier from './components/DeadlineNotifier.jsx'
 import { applyConfig } from './store/appConfig.js'
@@ -18,7 +19,6 @@ import { AuthProvider, useAuth } from './lib/AuthContext.jsx'
 import { isSupabaseReady } from './lib/supabase.js'
 import './styles/global.css'
 
-// Map route path → page id used by usePageBackground and Sidebar active state
 const ROUTE_TO_PAGE = {
   '/': 'studio',
   '/studio': 'studio',
@@ -28,9 +28,9 @@ const ROUTE_TO_PAGE = {
   '/guide': 'guide',
   '/settings': 'settings',
   '/connections': 'connections',
+  '/clients': 'clients',
 }
 
-// Map sidebar page id → route path
 const PAGE_TO_ROUTE = {
   studio: '/studio',
   requests: '/requests',
@@ -39,6 +39,7 @@ const PAGE_TO_ROUTE = {
   guide: '/guide',
   settings: '/settings',
   connections: '/connections',
+  clients: '/clients',
 }
 
 function AppShell() {
@@ -49,10 +50,8 @@ function AppShell() {
 
   const activePage = ROUTE_TO_PAGE[location.pathname] ?? 'studio'
 
-  // Apply saved config on mount
   useEffect(() => { applyConfig() }, [])
 
-  // Handle Gmail OAuth redirect
   useEffect(() => {
     if (!window.location.search.includes('code=')) return
     if (!sessionStorage.getItem('gmail_oauth_return')) return
@@ -88,15 +87,13 @@ function AppShell() {
         mobileOpen={sidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
       />
-
       {sidebarOpen && (
         <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
       )}
-
       <main className="app-main">
         <button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="Abrir menú">☰</button>
         <Routes>
-          <Route path="/" element={<Navigate to="/studio" replace />} />
+          <Route path="/"            element={<Navigate to="/studio" replace />} />
           <Route path="/studio"      element={<StudioPage />} />
           <Route path="/requests"    element={<RequestsPage />} />
           <Route path="/archived"    element={<ArchivedPage />} />
@@ -104,6 +101,7 @@ function AppShell() {
           <Route path="/guide"       element={<GuidePage />} />
           <Route path="/settings"    element={<SettingsPage />} />
           <Route path="/connections" element={<ConnectionsPage />} />
+          <Route path="/clients"     element={<ClientsPage />} />
           <Route path="*"            element={<Navigate to="/studio" replace />} />
         </Routes>
       </main>
