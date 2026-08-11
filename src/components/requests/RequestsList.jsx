@@ -12,6 +12,8 @@ import { setTaskField } from '../../store/taskStore.js'
 import AcceptCommissionModal from './AcceptCommissionModal.jsx'
 import { getRequests, saveRequest } from '../../lib/db.js'
 import { findOrCreateClientFromRequest } from '../../lib/clientsDb.js'
+import { generateInvoicePDF } from '../../utils/generateInvoice.js'
+import InvoiceGenerator from '../InvoiceGenerator.jsx'
 
 const STATUS_COLORS = {
   pending: '#F59E0B',
@@ -34,6 +36,8 @@ export default function RequestsList() {
   const [emailStatus, setEmailStatus] = useState(null) // { ok, msg }
   const [showAcceptModal, setShowAcceptModal] = useState(false)
   const [pendingAcceptReq, setPendingAcceptReq] = useState(null)
+  const [showInvoice, setShowInvoice] = useState(false)
+  const [invoiceReq, setInvoiceReq] = useState(null)
 
   // Re-check Gmail connection dynamically (user might connect after component mounts)
   const [gmailActive, setGmailActive] = useState(isGmailConnected())
@@ -278,6 +282,27 @@ export default function RequestsList() {
 
             {/* Actions */}
             <div className="detail-actions">
+              {selected.status === 'accepted' && selected.paymentDetails && (
+                <button
+                  className="btn-outline"
+                  onClick={() => generateInvoicePDF({
+                    clientName: selected.name,
+                    clientEmail: selected.email,
+                    commissionTitle: `${selected.artworkType} — ${selected.name}`,
+                    artworkType: selected.artworkType,
+                    description: selected.description,
+                    price: selected.paymentDetails.price,
+                    currency: selected.paymentDetails.currency ?? 'USD',
+                    deadline: selected.deadline,
+                    notes: selected.paymentDetails.note,
+                    paymentMethods: selected.paymentDetails.methods ?? [],
+                    type: 'presupuesto',
+                  })}
+                  style={{ fontSize: '0.82rem' }}
+                >
+                  📄 Descargar presupuesto PDF
+                </button>
+              )}
               {selected.status === 'pending' && (
                 <button
                   className="btn-primary"

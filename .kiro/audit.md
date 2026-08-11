@@ -108,7 +108,7 @@ La app es funcional y está lista para producción en sus funciones core. La inf
 - [ ] Dashboard stats avanzadas (ingresos, tiempo total)
 
 ### Fase 4 — Features avanzadas
-- [ ] Base de datos de clientes
+- [x] Base de datos de clientes ✅
 - [ ] Facturación PDF
 - [ ] Vista calendario
 - [ ] Páginas sidebar pendientes (Integraciones, etc.)
