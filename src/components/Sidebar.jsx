@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { id: 'clients',  icon: '👥', label: 'Clientes' },
   { id: 'archived', icon: '🗂', label: 'Archivados' },
   { id: 'portfolio',icon: '🖼', label: 'Galería de Portafolio' },
+  { id: 'calendar', icon: '📅', label: 'Calendario' },
   { id: 'guide',    icon: '📖', label: 'Guía del Estudio' },
 ]
 
