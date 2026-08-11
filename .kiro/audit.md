@@ -102,10 +102,10 @@ La app es funcional y está lista para producción en sus funciones core. La inf
 - [x] Lightbox stale closure fix ✅
 
 ### Fase 3 — Features básicas faltantes
-- [ ] Buscador global (Ctrl-K)
-- [ ] Dashboard stats reales (ingresos, tiempo)
+- [x] Buscador global (Ctrl-K) ✅
+- [x] Notificaciones de deadline ✅
 - [ ] Router (React Router v6)
-- [ ] Notificaciones de deadline
+- [ ] Dashboard stats avanzadas (ingresos, tiempo total)
 
 ### Fase 4 — Features avanzadas
 - [ ] Base de datos de clientes
