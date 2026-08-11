@@ -16,6 +16,7 @@ import './styles/global.css'
 
 import ArchivedPage from './pages/ArchivedPage.jsx'
 import DebugPanel from './components/DebugPanel.jsx'
+import DeadlineNotifier from './components/DeadlineNotifier.jsx'
 
 const PAGES = {
   studio: StudioPage,
@@ -102,6 +103,7 @@ export default function App() {
     <AuthProvider>
       <AppShell />
       <DebugPanel />
+      <DeadlineNotifier />
     </AuthProvider>
   )
 }
