@@ -1,114 +1,134 @@
 # Auditoría del Proyecto — Estudio de Comisiones
-Fecha: 2026-08-10 | Versión: v1.7.1
+Última actualización: v1.9.3 | 2026-08-10
 
 ---
 
-## Estado General
-La app es funcional y está lista para producción en sus funciones core. La infraestructura (Supabase + R2 + Google Auth) está bien diseñada. Los problemas son deuda técnica acumulada de la plantilla original (Taskade) y features de UI que están visualmente presentes pero sin implementar.
+## ✅ ESTADO ACTUAL — Todo lo completado
+
+### Infraestructura y base
+- [x] Google OAuth (Supabase Auth) funcional ✅
+- [x] Cloudflare R2 para imágenes — portafolio, adjuntos ✅
+- [x] Worker R2 con CORS para todos los deploys de Vercel ✅
+- [x] Supabase como única fuente de verdad (Taskade eliminado) ✅
+- [x] React Router v6 con hash routing — URLs por página ✅
+- [x] Multi-usuario con aislamiento de datos ✅
+
+### Sincronización de datos
+- [x] Portafolio: R2 (imágenes) + Supabase (metadatos) + recovery automático ✅
+- [x] Tareas: 100% Supabase (text, parentId, campos) ✅
+- [x] Solicitudes de comisión: Supabase ✅
+- [x] Formulario público → Supabase ✅
+- [x] Archivados: Supabase ✅
+- [x] Configuración visual (profiles): Supabase ✅
+- [x] Kanban config: Supabase ✅
+- [x] Telegram config: Supabase (profiles.telegram_token) ✅
+- [x] Gmail tokens: Supabase (profiles.gmail_tokens) ✅
+- [x] UI prefs (view mode, header): Supabase (profiles.ui_prefs) ✅
+- [x] Guía del estudio: Supabase ✅
+- [x] Attachments: R2 + recovery desde R2 al login ✅
+- [x] Clientes: Supabase (tabla clients) ✅
+
+### Bugs corregidos
+- [x] Timer debounce 30s (antes 1 upsert/seg) ✅
+- [x] Dashboard métricas reales (avance, urgentes hoy) ✅
+- [x] savePortfolio atómico con upsert ✅
+- [x] Lightbox stale closure ✅
+- [x] task_fields cleanup al borrar tareas ✅
+- [x] KanbanBoard escribe a Supabase (antes solo localStorage) ✅
+- [x] Portafolio IDs con UUID válidos (antes float) ✅
+- [x] Base64 cleanup en localStorage ✅
+
+### Features implementadas
+- [x] Buscador global Ctrl-K (tareas, solicitudes, portafolio, páginas) ✅
+- [x] Notificaciones de deadline (hoy, mañana, vencidas) ✅
+- [x] Base de datos de clientes con historial ✅
+- [x] Auto-crear cliente al aceptar solicitud ✅
+- [x] Generador PDF presupuesto/factura (jsPDF lazy load) ✅
+- [x] Calendario de deadlines ✅
+- [x] Storage Monitor (debug tool) ✅
+- [x] Páginas sidebar: Media, Integraciones, Mapa DNA ✅
 
 ---
 
-## 🔴 Funciones visibles que NO hacen nada (stubs)
+## 🔴 PENDIENTE — Lo que falta
 
-| # | Elemento | Dónde | Estado |
-|---|---|---|---|
-| 1 | **Buscador / Ctrl-K** | Sidebar | `readOnly` — no busca nada |
-| 2 | **"✦ Abrir asistente"** | Header estudio | Sin handler — botón fantasma |
-| 3 | **"⚙" configuración** | Header estudio | Sin handler |
-| 4 | **"+2 más" pill** | Tarjetas kanban | Hardcodeado, no muestra nada |
-| 5 | **"💳 Pagar y enviar solicitud"** | Formulario público | No hay integración de pago real |
-| 6 | **Medios de comunicación** | Sidebar | Página inexistente |
-| 7 | **Integraciones** | Sidebar | Página inexistente |
-| 8 | **Agentes de IA** | Sidebar | Página inexistente |
-| 9 | **Automatizaciones** | Sidebar | Página inexistente |
-| 10 | **Mapa DNA** | Sidebar | Página inexistente |
-| 11 | **"Agregar tarea arriba/abajo"** | Menú contexto tarjeta | Agrega al final en lugar de en posición indicada |
+### Fase 3 incompleta
+- [ ] **Dashboard stats avanzadas** — ingresos totales, tiempo por comisión, tasa de conversión solicitudes→comisiones
 
----
+### Fase 4 pendiente  
+- [ ] **Automatizaciones** — página de reglas automáticas (ej: mover tarjeta al aceptar, enviar webhook al completar). Falta crear `AutomationsPage.jsx` y conectarla en `/#/automations`
+- [ ] **Agentes de IA** — página con prompts útiles para artistas. Falta crear `AiAgentsPage.jsx` y conectarla en `/#/ai`
 
-## 🟡 Bugs de datos
+### Bugs menores pendientes
+- [ ] `local_tasks` localStorage crece sin límite — falta limpiar tareas viejas no referenciadas en Supabase
+- [ ] `insertPublicRequest` sin auth — si el artista NO está logueado cuando un cliente llena el formulario, falla silenciosamente
 
-| # | Bug | Archivo | Prioridad | Estado |
-|---|---|---|---|---|
-| 1 | **Timer llama Supabase cada segundo** (1 upsert/seg por tarea activa) | `store/taskStore.js` | ALTA | ✅ Completado v1.7.2 |
-| 2 | **`insertPublicRequest` no guarda en Supabase** — TODO en el código | `lib/db.js` | ALTA | ✅ Completado v1.7.2 |
-| 3 | **Dashboard "AVANCE PROMEDIO" hardcodeado al 30%** | `components/Dashboard.jsx` | ALTA | ✅ Completado v1.7.2 |
-| 4 | **Dashboard "ATENCIÓN HOY" = mismo valor que "ACTIVAS"** | `pages/StudioPage.jsx` | MEDIA | ✅ Completado v1.7.2 |
-| 5 | **`savePortfolio` hace delete+insert no atómico** (riesgo de pérdida de datos) | `lib/db.js` | MEDIA | ✅ Completado v1.7.3 |
-| 6 | **GuidePage guarda bloques solo a localStorage** — nunca a Supabase | `pages/GuidePage.jsx` | MEDIA | ✅ Completado v1.7.3 |
+### Deuda técnica menor
+- [ ] Chunk size warning (index.js 693KB) — añadir `manualChunks` en vite.config.js para separar vendor libs
+- [ ] `ProximamentePanel.jsx` — ya no se usa, eliminar el componente
+- [ ] `PLACEHOLDER_ITEMS` en Sidebar.jsx — array vacío ahora, limpiar
 
 ---
 
-## 🟠 Deuda técnica / Arquitectura
+## 📋 PARA LA PRÓXIMA SESIÓN — Checklist de trabajo
 
-| # | Problema | Impacto | Estado |
-|---|---|---|---|
-| 1 | **Sin router (React Router)** — browser back/forward roto, no hay deep links | ALTO | ⬜ Pendiente |
-| 2 | **`task_fields` localStorage crece sin límite** — tareas antiguas nunca se limpian | MEDIO | ⬜ Pendiente |
-| 3 | **`setTaskField` no debounceable** — cada cambio de campo = upsert inmediato | MEDIO | ⬜ Pendiente |
-| 4 | **`local_tasks` localStorage** — sigue siendo la fuente de verdad offline, duplica Supabase | BAJO | ⬜ Pendiente |
-| 5 | **`ProximamentePanel.jsx`** — componente vacío/placeholder sin uso real | BAJO | ⬜ Pendiente |
-| 6 | **Lightbox en Portfolio** — closures stale en el keyboard handler (dep array vacío) | BAJO | ⬜ Pendiente |
-| 7 | **`savePortfolio` no atómico** — delete + insert separados, fallo en medio = datos perdidos | MEDIO | ⬜ Pendiente |
+Prioridad alta:
+1. **Crear `AutomationsPage.jsx`** — reglas: "cuando se acepta solicitud → crear tarea en sección X", "cuando se completa tarea → archivar automáticamente"
+2. **Crear `AiAgentsPage.jsx`** — prompts prediseñados para generar descripciones de comisiones, respuestas a clientes, tags de portafolio
+3. **Dashboard stats avanzadas** — agregar a `StatsPage.jsx` los ingresos del histórico de archivados con payment_details
 
----
-
-## ✅ Features completamente funcionales
-
-- Google OAuth (Supabase Auth) ✅
-- Portafolio con R2 + recovery automático desde R2 ✅
-- Kanban sincronizado a Supabase (sin Taskade) ✅
-- Archivados persistentes ✅
-- Configuración visual (profiles en Supabase) ✅
-- Telegram config sincronizado a Supabase ✅
-- Gmail OAuth + envío de emails ✅
-- Sticker sets de Telegram ✅
-- Adjuntos de tareas en R2 con recovery al login ✅
-- Solicitudes de comisión en Supabase ✅
-- Formulario público → Supabase ✅
-- Storage Monitor (debug tool) ✅
-- Multi-usuario con aislamiento de datos ✅
+Prioridad media:
+4. **vite.config.js manualChunks** — dividir bundle principal
+5. **Limpiar ProximamentePanel** y PLACEHOLDER_ITEMS del Sidebar
+6. **local_tasks cleanup** — limpiar entradas huérfanas
 
 ---
 
-## 🔵 Features faltantes esperadas en un commission manager
+## 🗄 TABLAS SUPABASE EXISTENTES
 
-| # | Feature | Complejidad | Prioridad |
-|---|---|---|---|
-| 1 | **Base de datos de clientes** — historial por cliente, contactos repetidos | Media | Alta |
-| 2 | **Buscador global** — buscar por nombre de tarea, cliente, tag | Baja | Alta |
-| 3 | **Facturación / presupuestos** — generar PDFs de presupuesto o factura | Alta | Media |
-| 4 | **Notificaciones in-app** — deadlines próximas, recordatorios | Media | Media |
-| 5 | **Estadísticas / reportes** — ingresos por mes, tiempo por comisión, % completado real | Media | Media |
-| 6 | **Vista de calendario** — ver comisiones por fecha límite | Media | Baja |
-| 7 | **Integración de pagos real** — Stripe/PayPal para cobrar desde la app | Alta | Baja |
-| 8 | **Chat/notas con cliente** — thread de mensajes por comisión | Alta | Baja |
-| 9 | **URL router** — navegación con browser history | Baja | Media |
-| 10 | **Export de datos** — exportar comisiones/portafolio como CSV o ZIP | Baja | Baja |
+| Tabla | Uso |
+|---|---|
+| `profiles` | Config visual, telegram_token, gmail_tokens, ui_prefs, sidebar_width |
+| `tasks` | Estructura y campos de comisiones activas (text, parentId, attachments, etc.) |
+| `commission_requests` | Solicitudes de clientes |
+| `portfolio_items` | Metadatos de portafolio (URL viene de R2) |
+| `archived_commissions` | Historial de comisiones completadas |
+| `studio_guide` | Bloques del editor de guía |
+| `kanban_config` | Columnas, colores, orden del kanban |
+| `clients` | Base de datos de clientes con historial |
 
 ---
 
-## Plan de trabajo
+## 🌐 RUTAS DE LA APP (React Router hash)
 
-### Fase 1 — Bugs críticos (activo)
-- [x] Timer debounce a Supabase ✅
-- [x] insertPublicRequest → Supabase ✅
-- [x] Dashboard métricas reales ✅
+| Ruta | Página | Estado |
+|---|---|---|
+| `/#/studio` | Estudio de Comisiones | ✅ Completo |
+| `/#/requests` | Solicitudes de Comisión | ✅ Completo |
+| `/#/clients` | Clientes | ✅ Completo |
+| `/#/archived` | Archivados | ✅ Completo |
+| `/#/portfolio` | Galería de Portafolio | ✅ Completo |
+| `/#/calendar` | Calendario | ✅ Completo |
+| `/#/guide` | Guía del Estudio | ✅ Completo |
+| `/#/connections` | Conexiones (Telegram + Gmail) | ✅ Completo |
+| `/#/media` | Medios de comunicación | ✅ Completo |
+| `/#/integrations` | Integraciones | ✅ Completo |
+| `/#/stats` | Mapa DNA / Stats | ✅ Completo |
+| `/#/settings` | Configuración | ✅ Completo |
+| `/#/automations` | Automatizaciones | ❌ Falta crear |
+| `/#/ai` | Agentes de IA | ❌ Falta crear |
 
-### Fase 2 — Deuda técnica
-- [x] savePortfolio → upsert atómico ✅
-- [x] GuidePage → Supabase ✅
-- [x] task_fields cleanup (remover tareas eliminadas del caché) ✅
-- [x] Lightbox stale closure fix ✅
+---
 
-### Fase 3 — Features básicas faltantes
-- [x] Buscador global (Ctrl-K) ✅
-- [x] Notificaciones de deadline ✅
-- [ ] Router (React Router v6)
-- [ ] Dashboard stats avanzadas (ingresos, tiempo total)
+## 📦 VERSIONES DEL PROYECTO
 
-### Fase 4 — Features avanzadas
-- [x] Base de datos de clientes ✅
-- [ ] Facturación PDF
-- [ ] Vista calendario
-- [ ] Páginas sidebar pendientes (Integraciones, etc.)
+| Versión | Cambio |
+|---|---|
+| v1.4.x | R2 storage inicial |
+| v1.5.x | CORS Worker, Storage Monitor, UUID fix |
+| v1.6.x | Telegram/Gmail a Supabase, GuidePage sync, portafolio upsert |
+| v1.7.x | Sin Taskade, 100% Supabase, adjuntos desde R2 |
+| v1.8.x | Buscador global, notificaciones deadline, React Router |
+| v1.9.x | Clientes DB, PDF factura, Calendario, páginas sidebar |
+
+Versión actual: **v1.9.3**
