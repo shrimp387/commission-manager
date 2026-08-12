@@ -274,8 +274,10 @@ export default function ConnectionsPage() {
   const [showGmailTest, setShowGmailTest] = useState(false)
 
   // ── Mistral state ──
-  const [mistralKey, setMistralKey]   = useState('')
-  const [mistralSaved, setMistralSaved] = useState(false)
+  const [mistralKey, setMistralKey]         = useState('')
+  const [mistralSaved, setMistralSaved]     = useState(false)
+  const [mistralTesting, setMistralTesting] = useState(false)
+  const [mistralTestResult, setMistralTestResult] = useState(null)
 
   // ── Companion App state ──
   const [companionStatus, setCompanionStatus] = useState(null) // null | 'checking' | 'ok' | 'err'
@@ -320,7 +322,38 @@ export default function ConnectionsPage() {
   function handleSaveMistral() {
     setConfig('mistralApiKey', mistralKey.trim())
     setMistralSaved(true)
+    setMistralTestResult(null)
     setTimeout(() => setMistralSaved(false), 2500)
+  }
+
+  async function handleTestMistral() {
+    const key = mistralKey.trim() || getConfig().mistralApiKey
+    if (!key) return
+    setMistralTesting(true)
+    setMistralTestResult(null)
+    try {
+      // Call Mistral models endpoint — lightweight, no image needed
+      const res = await fetch('https://api.mistral.ai/v1/models', {
+        headers: { Authorization: `Bearer ${key}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        // Check pixtral is available
+        const hasPixtral = data.data?.some(m => m.id?.includes('pixtral'))
+        setMistralTestResult({
+          ok: true,
+          msg: hasPixtral
+            ? '✅ Conectado — Pixtral Large disponible para análisis NSFW'
+            : '✅ Conectado (Pixtral Large no encontrado — verifica tu plan)',
+        })
+      } else {
+        const body = await res.json().catch(() => ({}))
+        setMistralTestResult({ ok: false, msg: `❌ ${body?.message || `HTTP ${res.status}`}` })
+      }
+    } catch (err) {
+      setMistralTestResult({ ok: false, msg: `❌ Error de red: ${err.message}` })
+    }
+    setMistralTesting(false)
   }
 
   // ── Companion App handler ─────────────────────────────────────────────────
@@ -635,7 +668,20 @@ export default function ConnectionsPage() {
                 >
                   {mistralSaved ? '✓ Guardado' : '💾 Guardar'}
                 </button>
+                <button
+                  className="btn-outline"
+                  onClick={handleTestMistral}
+                  disabled={mistralTesting || (!mistralKey.trim() && !getConfig().mistralApiKey)}
+                >
+                  {mistralTesting ? 'Probando...' : '🧪 Probar conexión'}
+                </button>
               </div>
+
+              {mistralTestResult && (
+                <p className={`test-result ${mistralTestResult.ok ? 'test-result--ok' : 'test-result--err'}`}>
+                  {mistralTestResult.msg}
+                </p>
+              )}
             </div>
           </div>
 
