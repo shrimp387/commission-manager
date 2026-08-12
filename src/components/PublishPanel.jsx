@@ -4,8 +4,28 @@ import { identifyHighResAttachment, generateTags, normalizeTag, ConfigError } fr
 import { getPostyBirbAccounts, createSubmission, updateSubmission, queueSubmission } from '../lib/postybirb.js'
 import { publishToE621 } from '../lib/platforms/e621.js'
 import { savePublication } from '../lib/publicationsDb.js'
+import { insertPublishJob } from '../lib/publishJobsDb.js'
 import { getCurrentUserId } from '../lib/db.js'
 import { getConfig } from '../store/appConfig.js'
+
+// ── Companion platform routing ─────────────────────────────────────────────────
+
+/**
+ * Platform IDs handled by the Electron companion app.
+ * These map directly to the platform modules in companion-app/src/platforms/.
+ * PostyBirb accounts use UUIDs; companion platforms use plain string IDs.
+ */
+export const COMPANION_PLATFORM_IDS = new Set([
+  'e621', 'inkbunny', 'weasyl', 'bluesky', 'telegram', 'discord',
+])
+
+/**
+ * Returns true if the given account ID is a companion-app platform.
+ * Exported for property-based testing (Property 3).
+ */
+export function isCompanionPlatform(id) {
+  return COMPANION_PLATFORM_IDS.has(id)
+}
 
 // ── Validation ─────────────────────────────────────────────────────────────────
 
@@ -157,7 +177,7 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
           if (err instanceof ConfigError) {
             setTagsError(err.message)
           } else {
-            setTagsError('No se pudieron generar tags automáticamente. Puedes agregar tags manualmente.')
+            setTagsError('No se pudieron generar tags con Mistral. Puedes agregar tags manualmente.')
           }
         }
       } finally {
@@ -165,43 +185,49 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
       }
     }
 
-    // Load PostyBirb accounts + detect built-in platforms
+    // Load accounts: built-in e621, companion platforms, and PostyBirb accounts
     async function loadAccounts() {
       const builtIn = []
 
-      // e621 — available if credentials are configured
+      // e621 direct (legacy built-in route) — available if credentials stored in appConfig
       const cfg = getConfig()
       if (cfg.e621Username && cfg.e621ApiKey) {
         builtIn.push({ id: '__e621__', website: 'e621', name: cfg.e621Username, builtin: true })
       }
 
+      // Companion app platforms — always shown so the user can select them;
+      // the companion app handles them asynchronously via publish_jobs in Supabase.
+      // Skip e621 here since it's already covered by the __e621__ built-in above.
+      const companionAccts = ['inkbunny', 'weasyl', 'bluesky', 'telegram', 'discord'].map(p => ({
+        id: p,
+        website: p,
+        name: p,
+        isCompanion: true,
+      }))
+
       // PostyBirb accounts (optional — only if URL is configured)
+      let postybirbAccts = []
       if (cfg.postybirbUrl) {
         try {
-          const accts = await getPostyBirbAccounts()
-          if (!cancelled) {
-            setAccounts([...builtIn, ...accts])
-            setAcctsError(null)
-          }
-        } catch (err) {
-          if (!cancelled) {
-            // PostyBirb failed but we may still have built-in platforms
-            setAccounts(builtIn)
-            if (builtIn.length === 0) {
-              setAcctsError('No se pudo conectar con PostyBirb. Verifica la URL en Conexiones.')
-            }
-          }
-        }
-      } else {
-        if (!cancelled) {
-          setAccounts(builtIn)
-          if (builtIn.length === 0) {
-            setAcctsError('No hay plataformas configuradas. Ve a Conexiones para agregar e621 u otras.')
+          postybirbAccts = await getPostyBirbAccounts()
+        } catch {
+          // PostyBirb unavailable — not fatal, companion + builtin still work
+          if (!cancelled && builtIn.length === 0 && companionAccts.length === 0) {
+            setAcctsError('No se pudo conectar con PostyBirb. Verifica la URL en Conexiones.')
           }
         }
       }
 
-      if (!cancelled) setLoadingAccts(false)
+      if (!cancelled) {
+        const all = [...builtIn, ...companionAccts, ...postybirbAccts]
+        setAccounts(all)
+        if (all.length === 0) {
+          setAcctsError('No hay plataformas disponibles. Configura la companion app o PostyBirb en Conexiones.')
+        } else {
+          setAcctsError(null)
+        }
+        setLoadingAccts(false)
+      }
     }
 
     loadTags()
@@ -226,7 +252,7 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
       setTagsState(generated)
       updateField(taskId, 'publishTags', generated)
     } catch (err) {
-      setTagsError(err instanceof ConfigError ? err.message : 'No se pudieron generar tags. Puedes agregar manualmente.')
+      setTagsError(err instanceof ConfigError ? err.message : 'No se pudieron generar tags con Mistral. Puedes agregar manualmente.')
     } finally {
       setLoadingTags(false)
     }
@@ -268,18 +294,19 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
         throw new Error('Error al obtener la imagen desde el almacenamiento. Intenta de nuevo.')
       }
 
-      // Step 2 — Create submission
+      // Step 2 — Route to platforms
       setSendStep('submitting')
       const fileName = highRes.name || 'artwork.png'
 
-      // Separate built-in platforms from PostyBirb accounts
-      const e621Selected = selected.includes('__e621__')
-      const postybirbSelected = selected.filter(id => id !== '__e621__')
+      // Separate accounts by route type
+      const e621Selected       = selected.includes('__e621__')
+      const companionSelected  = selected.filter(id => isCompanionPlatform(id))
+      const postybirbSelected  = selected.filter(id => id !== '__e621__' && !isCompanionPlatform(id))
 
       const publishedPlatforms = []
       const errors = []
 
-      // Publish to e621 directly if selected
+      // ── Route A: e621 direct (built-in) ────────────────────────────────
       if (e621Selected) {
         try {
           const result = await publishToE621({
@@ -300,7 +327,27 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
         }
       }
 
-      // Publish via PostyBirb if accounts selected
+      // ── Route B: companion app via publish_jobs in Supabase ─────────────
+      if (companionSelected.length > 0) {
+        setSendStep('queuing')
+        try {
+          await insertPublishJob({
+            taskId,
+            taskName: task?.text ?? '',
+            imageUrl: highRes.url,
+            platforms: companionSelected,
+            title: title.trim(),
+            description: desc.trim(),
+            tags,
+            rating: 'safe',
+          })
+          publishedPlatforms.push(...companionSelected)
+        } catch (err) {
+          errors.push(`companion: ${err?.message || 'Error al enviar job'}`)
+        }
+      }
+
+      // ── Route C: PostyBirb ──────────────────────────────────────────────
       if (postybirbSelected.length > 0) {
         const submissionId = await createSubmission(blob, fileName, title.trim(), desc.trim())
         await updateSubmission(submissionId, { tags, accountIds: postybirbSelected })
@@ -312,7 +359,7 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
           .filter(a => postybirbSelected.includes(a.id))
           .map(a => a.website || a.name || a.id)
         publishedPlatforms.push(...pbNames)
-      } else {
+      } else if (!companionSelected.length) {
         setSendStep('queuing')
       }
 
@@ -385,18 +432,25 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
 
         {sendSuccess ? (
           <div className="pp-success">
-            <p className="pp-success-msg">✅ Obra enviada a PostyBirb correctamente</p>
+            <p className="pp-success-msg">✅ Obra enviada correctamente</p>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Cerrando...</p>
           </div>
         ) : (
           <div className="pp-body">
-            {/* Left column — image preview */}
+            {/* Left column — image preview (thumbnail, publishes full-res) */}
             <div className="pp-col-image">
               {highRes ? (
                 <img
                   src={highRes.url}
                   alt="Vista previa"
                   className="pp-preview-img"
+                  style={{
+                    width: '100%',
+                    maxHeight: '180px',
+                    objectFit: 'contain',
+                    borderRadius: '8px',
+                    background: 'var(--bg-dark, #111)',
+                  }}
                 />
               ) : (
                 <div className="pp-preview-placeholder">
@@ -444,7 +498,7 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
                   )}
                 </div>
                 {loadingTags ? (
-                  <div className="pp-loading-row"><div className="mini-spinner" /><span>Generando tags con IA...</span></div>
+                  <div className="pp-loading-row"><div className="mini-spinner" /><span>Generando tags con Mistral...</span></div>
                 ) : tagsError ? (
                   <p className="pp-warn">{tagsError}</p>
                 ) : null}
@@ -455,7 +509,7 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
               <div className="pp-field">
                 <label className="pp-label">Plataformas</label>
                 {loadingAccts ? (
-                  <div className="pp-loading-row"><div className="mini-spinner" /><span>Conectando con PostyBirb...</span></div>
+                  <div className="pp-loading-row"><div className="mini-spinner" /><span>Cargando plataformas...</span></div>
                 ) : acctsError ? (
                   <p className="pp-error">{acctsError}</p>
                 ) : accounts.length === 0 ? (

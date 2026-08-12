@@ -1,0 +1,460 @@
+/**
+ * main.js — Electron entry point for Commission Manager Companion App
+ *
+ * This app runs on the artist's PC and:
+ * 1. Shows a system tray icon (runs in background)
+ * 2. Polls Supabase for pending publish jobs
+ * 3. Executes each job using the appropriate platform publisher
+ * 4. Reports results back to Supabase
+ * 5. Provides a settings window for platform credentials
+ */
+
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } = require('electron')
+const path = require('path')
+const Store = require('electron-store')
+const { createClient } = require('@supabase/supabase-js')
+const { JobRunner } = require('./jobRunner')
+
+// ── Config store (encrypted on disk) ─────────────────────────────────────────
+const store = new Store({
+  encryptionKey: 'commission-manager-companion-v1',
+  defaults: {
+    // Supabase credentials — hardcoded for this deployment.
+    // The user never needs to enter these; they are pre-configured.
+    supabaseUrl:     'https://yhlhsqhlnzgrhagoeosp.supabase.co',
+    supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlobGhzcWhsbnpncmhhZ29lb3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzMjEzMjIsImV4cCI6MjEwMTg5NzMyMn0.5OR7M62fNWnsPzNuyu06ub-joZusH9Ud9yeTcvp6dWc',
+    supabaseUserId:  '', // filled automatically after Google login
+    pollInterval: 5000,
+    platforms: {
+      e621:        { username: '', apiKey: '',      enabled: false },
+      inkbunny:    { username: '', password: '',    enabled: false },
+      weasyl:      { apiKey: '',                   enabled: false },
+      bluesky:     { handle: '', appPassword: '',  enabled: false },
+      telegram:    { botToken: '', chatId: '',      enabled: false },
+      discord:     { webhookUrl: '',               enabled: false },
+      furaffinity: { enabled: false },
+      pixiv:       { enabled: false },
+      patreon:     { enabled: false },
+    }
+  }
+})
+
+// ── Globals ───────────────────────────────────────────────────────────────────
+let tray = null
+let settingsWindow = null
+let supabase = null
+let jobRunner = null
+let pollTimer = null
+let isRunning = false
+
+// ── App ready ─────────────────────────────────────────────────────────────────
+app.whenReady().then(async () => {
+  app.setAppUserModelId('Commission Manager Companion')
+
+  createTray()
+  initSupabase()
+  startOAuthCallback()   // listen for Google OAuth redirect
+  startPolling()
+
+  // Open settings on first run if user has not logged in yet
+  if (!store.get('supabaseUserId')) {
+    openSettings()
+  }
+})
+
+app.on('window-all-closed', () => {
+  // Don't quit when all windows are closed — keep running in tray
+})
+
+// ── Tray ──────────────────────────────────────────────────────────────────────
+function createTray() {
+  // Use a simple colored icon
+  const icon = nativeImage.createFromDataURL(
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAA'
+  )
+  tray = new Tray(icon)
+
+  updateTrayMenu()
+  tray.setToolTip('Commission Manager Companion')
+  tray.on('double-click', openSettings)
+}
+
+function updateTrayMenu(status = 'idle') {
+  const statusLabel = {
+    idle:      '⚪ Esperando jobs...',
+    running:   '🟢 Publicando...',
+    error:     '🔴 Error — ver configuración',
+    noconfig:  '⚠️ Inicia sesión en Configuración',
+  }[status] || '⚪ Activo'
+
+  const menu = Menu.buildFromTemplate([
+    { label: 'Commission Manager Companion', enabled: false },
+    { label: statusLabel, enabled: false },
+    { type: 'separator' },
+    { label: '⚙ Configuración', click: openSettings },
+    { label: '🌐 Abrir app web', click: () => shell.openExternal('https://commission-manager-plum.vercel.app') },
+    { type: 'separator' },
+    { label: 'Salir', click: () => { app.quit() } }
+  ])
+  tray.setContextMenu(menu)
+}
+
+// ── Settings window ───────────────────────────────────────────────────────────
+function openSettings() {
+  if (settingsWindow) {
+    settingsWindow.focus()
+    return
+  }
+
+  settingsWindow = new BrowserWindow({
+    width: 700,
+    height: 600,
+    title: 'Companion App — Configuración',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+    autoHideMenuBar: true,
+  })
+
+  settingsWindow.loadFile(path.join(__dirname, '..', 'ui', 'settings.html'))
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null
+  })
+}
+
+// ── Supabase credentials (hardcoded — no user configuration needed) ───────────
+const SUPABASE_URL     = 'https://yhlhsqhlnzgrhagoeosp.supabase.co'
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlobGhzcWhsbnpncmhhZ29lb3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzMjEzMjIsImV4cCI6MjEwMTg5NzMyMn0.5OR7M62fNWnsPzNuyu06ub-joZusH9Ud9yeTcvp6dWc'
+
+// ── Supabase init ─────────────────────────────────────────────────────────────
+function initSupabase() {
+  // Always use hardcoded credentials — overwrite whatever is stored
+  store.set('supabaseUrl',     SUPABASE_URL)
+  store.set('supabaseAnonKey', SUPABASE_ANON_KEY)
+
+  // Disable realtime entirely — we only need REST/Auth, not WebSocket subscriptions.
+  // This avoids the "native WebSocket not found" error on Electron's Node 20 runtime.
+  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    realtime: {
+      // Provide a no-op WebSocket so the client doesn't crash on init
+      transport: class NoOpWS {
+        constructor() { this.readyState = 3 /* CLOSED */ }
+        send() {}
+        close() {}
+        addEventListener() {}
+        removeEventListener() {}
+      },
+    },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: true,
+    },
+  })
+
+  jobRunner = new JobRunner(supabase, store)
+
+  const userId = store.get('supabaseUserId')
+  updateTrayMenu(userId ? 'idle' : 'noconfig')
+}
+
+// ── Job polling ───────────────────────────────────────────────────────────────
+function startPolling() {
+  const interval = store.get('pollInterval') || 5000
+
+  async function poll() {
+    if (!supabase || !store.get('supabaseUserId')) return
+
+    try {
+      const userId = store.get('supabaseUserId')
+
+      // Fetch pending jobs for this user
+      const { data: jobs, error } = await supabase
+        .from('publish_jobs')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(5)
+
+      if (error) throw error
+      if (!jobs || jobs.length === 0) return
+
+      updateTrayMenu('running')
+
+      for (const job of jobs) {
+        await processJob(job)
+      }
+
+      updateTrayMenu('idle')
+    } catch (err) {
+      console.error('[poll] error:', err.message)
+    }
+  }
+
+  pollTimer = setInterval(poll, interval)
+  poll() // run immediately on start
+}
+
+// ── Process a single publish job ──────────────────────────────────────────────
+async function processJob(job) {
+  console.log(`[job] Processing job ${job.id} for platforms: ${job.platforms?.join(', ')}`)
+
+  // Mark as running
+  await supabase
+    .from('publish_jobs')
+    .update({ status: 'running', started_at: new Date().toISOString() })
+    .eq('id', job.id)
+
+  const results = []
+  const errors  = []
+
+  for (const platform of (job.platforms || [])) {
+    try {
+      const result = await jobRunner.publishToPlatform(platform, job)
+      results.push({ platform, ok: true, url: result?.url })
+    } catch (err) {
+      errors.push({ platform, error: err.message })
+    }
+  }
+
+  // Update job with results
+  const allOk = errors.length === 0
+  await supabase
+    .from('publish_jobs')
+    .update({
+      status: allOk ? 'completed' : (results.length > 0 ? 'partial' : 'error'),
+      completed_at: new Date().toISOString(),
+      results,
+      errors,
+    })
+    .eq('id', job.id)
+}
+
+// ── OAuth callback server ─────────────────────────────────────────────────────
+// Listens on http://localhost:54321/auth/callback for the Google OAuth redirect.
+// Extracts the session from the URL fragment and saves it to electron-store.
+
+function startOAuthCallback() {
+  const http = require('http')
+  const { URL } = require('url')
+
+  const server = http.createServer(async (req, res) => {
+    const reqUrl = new URL(req.url, 'http://localhost:54321')
+
+    if (reqUrl.pathname !== '/auth/callback') {
+      res.writeHead(404)
+      res.end()
+      return
+    }
+
+    // Serve a tiny HTML page that reads the hash fragment and posts it back
+    // (hash fragments are not sent to the server — we need client-side JS)
+    res.writeHead(200, { 'Content-Type': 'text/html' })
+    res.end(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Autenticando...</title></head>
+<body style="font-family:sans-serif;background:#0f0f1a;color:#e0e0f0;padding:40px;text-align:center">
+  <h2>✅ Iniciando sesión...</h2>
+  <p>Puedes cerrar esta pestaña.</p>
+  <script>
+    const hash = window.location.hash.substring(1)
+    const params = new URLSearchParams(hash)
+    const access_token  = params.get('access_token')
+    const refresh_token = params.get('refresh_token')
+    if (access_token) {
+      fetch('http://localhost:54321/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token, refresh_token })
+      })
+    }
+  </script>
+</body></html>`)
+  })
+
+  // Second handler: receive the tokens POSTed by the page above
+  const sessionServer = http.createServer(async (req, res) => {
+    if (req.method !== 'POST' || !req.url.includes('/auth/session')) {
+      res.writeHead(404); res.end(); return
+    }
+    let body = ''
+    req.on('data', chunk => { body += chunk })
+    req.on('end', async () => {
+      try {
+        const { access_token, refresh_token } = JSON.parse(body)
+        if (access_token && supabase) {
+          const { data } = await supabase.auth.setSession({
+            access_token, refresh_token,
+          })
+          const userId = data?.user?.id
+          if (userId) {
+            store.set('supabaseUserId', userId)
+            console.log('[oauth] Logged in as', userId)
+          }
+        }
+        res.writeHead(200, { 'Content-Type': 'text/plain' })
+        res.end('ok')
+      } catch (e) {
+        res.writeHead(500); res.end(e.message)
+      }
+    })
+  })
+
+  // Use a single server with dual routing
+  const combined = http.createServer(async (req, res) => {
+    // CORS for the page's fetch call
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
+
+    const { URL } = require('url')
+    const reqUrl = new URL(req.url, 'http://localhost:54321')
+
+    if (reqUrl.pathname === '/auth/callback' && req.method === 'GET') {
+      // Serve the hash-reader page
+      res.writeHead(200, { 'Content-Type': 'text/html' })
+      res.end(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Autenticando...</title></head>
+<body style="font-family:sans-serif;background:#0f0f1a;color:#e0e0f0;padding:40px;text-align:center">
+  <h2>✅ Sesión iniciada</h2><p>Puedes cerrar esta pestaña.</p>
+  <script>
+    const hash = window.location.hash.substring(1)
+    const params = new URLSearchParams(hash)
+    const at = params.get('access_token')
+    const rt = params.get('refresh_token')
+    if (at) {
+      fetch('/auth/session', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ access_token: at, refresh_token: rt })
+      })
+    }
+  </script>
+</body></html>`)
+      return
+    }
+
+    if (reqUrl.pathname === '/auth/session' && req.method === 'POST') {
+      let body = ''
+      req.on('data', c => { body += c })
+      req.on('end', async () => {
+        try {
+          const { access_token, refresh_token } = JSON.parse(body)
+          if (access_token && supabase) {
+            const { data } = await supabase.auth.setSession({ access_token, refresh_token })
+            const userId = data?.user?.id
+            if (userId) {
+              store.set('supabaseUserId', userId)
+              updateTrayMenu('idle')
+              console.log('[oauth] ✅ Logged in, userId:', userId)
+            }
+          }
+          res.writeHead(200); res.end('ok')
+        } catch (e) {
+          console.error('[oauth] session error:', e.message)
+          res.writeHead(500); res.end(e.message)
+        }
+      })
+      return
+    }
+
+    res.writeHead(404); res.end()
+  })
+
+  combined.listen(54321, '127.0.0.1', () => {
+    console.log('[oauth] callback server listening on http://localhost:54321')
+  })
+
+  combined.on('error', (e) => {
+    // Port already in use — not fatal
+    console.warn('[oauth] server error:', e.message)
+  })
+}
+
+// ── IPC handlers (for settings UI) ───────────────────────────────────────────
+ipcMain.handle('get-config', () => store.store)
+
+ipcMain.handle('save-config', (event, config) => {
+  store.set(config)
+  // Reinit supabase if credentials changed
+  initSupabase()
+  return { ok: true }
+})
+
+ipcMain.handle('test-platform', async (event, { platform, credentials }) => {
+  if (!jobRunner) return { ok: false, error: 'Supabase no configurado' }
+  return jobRunner.testPlatform(platform, credentials)
+})
+
+ipcMain.handle('get-status', async () => {
+  let email = null
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getUser()
+      email = data?.user?.email ?? null
+    } catch {}
+  }
+  return {
+    connected: !!supabase,
+    userId: store.get('supabaseUserId'),
+    email,
+    polling: !!pollTimer,
+  }
+})
+
+// ── Google OAuth via Supabase ─────────────────────────────────────────────────
+ipcMain.handle('google-login', async () => {
+  if (!supabase) return { ok: false, error: 'Supabase no inicializado' }
+
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        // Opens in the system browser; Supabase redirects to a local callback
+        redirectTo: 'http://localhost:54321/auth/callback',
+        skipBrowserRedirect: false,
+      },
+    })
+
+    if (error) return { ok: false, error: error.message }
+
+    // Open the OAuth URL in the system browser
+    if (data?.url) {
+      shell.openExternal(data.url)
+      return { ok: true, pending: true }
+    }
+
+    return { ok: false, error: 'No se generó URL de OAuth' }
+  } catch (err) {
+    return { ok: false, error: err.message }
+  }
+})
+
+// Called from settings UI after the browser redirects back with the session
+ipcMain.handle('save-session', async (event, { accessToken, refreshToken, userId }) => {
+  try {
+    if (accessToken && refreshToken) {
+      await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+    }
+    if (userId) {
+      store.set('supabaseUserId', userId)
+    }
+    initSupabase()
+    return { ok: true, userId }
+  } catch (err) {
+    return { ok: false, error: err.message }
+  }
+})
+
+ipcMain.handle('logout', async () => {
+  try {
+    if (supabase) await supabase.auth.signOut()
+    store.set('supabaseUserId', '')
+    initSupabase()
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err.message }
+  }
+})

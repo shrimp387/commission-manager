@@ -1,0 +1,37 @@
+{
+  "name": "commission-manager-companion",
+  "version": "1.0.0",
+  "description": "Companion app for Commission Manager — publishes artwork to multiple platforms",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder --win",
+    "build:portable": "electron-builder --win portable"
+  },
+  "keywords": [],
+  "author": "woundzengberg",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.0",
+    "electron-store": "^8.2.0",
+    "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.0"
+  },
+  "build": {
+    "appId": "com.commissionmanager.companion",
+    "productName": "Commission Manager Companion",
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

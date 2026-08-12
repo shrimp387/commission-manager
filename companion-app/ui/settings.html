@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Commission Manager Companion — Configuración</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0f0f1a;
+      --bg-card:     #1a1a2e;
+      --bg-input:    #12122a;
+      --border:      #2a2a45;
+      --accent:      #7c6af5;
+      --accent-dim:  #5a4ecc;
+      --text:        #e0e0f0;
+      --text-dim:    #888aaa;
+      --text-label:  #a0a2c0;
+      --green:       #4caf7d;
+      --red:         #e05555;
+      --yellow:      #e0a050;
+      --radius:      10px;
+      --gap:         16px;
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────────── */
+    .app {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 24px 20px 48px;
+    }
+
+    .app-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .app-header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .app-header .subtitle {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    /* ── Status badge ─────────────────────────────────────────────────── */
+    #status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      border: 1px solid transparent;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    #status-badge::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    #status-badge.connected {
+      background: rgba(76, 175, 125, 0.12);
+      border-color: rgba(76, 175, 125, 0.3);
+      color: var(--green);
+    }
+
+    #status-badge.connected::before { background: var(--green); }
+
+    #status-badge.disconnected {
+      background: rgba(224, 85, 85, 0.12);
+      border-color: rgba(224, 85, 85, 0.3);
+      color: var(--red);
+    }
+
+    #status-badge.disconnected::before { background: var(--red); }
+
+    /* ── Section card ─────────────────────────────────────────────────── */
+    .section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .section-header:hover { background: rgba(124, 106, 245, 0.04); }
+
+    .section-icon {
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .section-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .section-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-left: auto;
+    }
+
+    .chevron {
+      margin-left: auto;
+      color: var(--text-dim);
+      transition: transform 0.2s;
+      font-size: 0.8rem;
+    }
+
+    .section.collapsed .section-body { display: none; }
+    .section.collapsed .chevron { transform: rotate(-90deg); }
+
+    .section-body {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap);
+    }
+
+    /* ── Fields ───────────────────────────────────────────────────────── */
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    label {
+      font-size: 0.78rem;
+      color: var(--text-label);
+      font-weight: 500;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="url"] {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+
+    input[type="text"]:focus,
+    input[type="password"]:focus,
+    input[type="url"]:focus {
+      border-color: var(--accent);
+    }
+
+    input::placeholder { color: var(--text-dim); opacity: 0.6; }
+
+    /* ── Checkbox (enabled toggle) ────────────────────────────────────── */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .toggle-row label {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      cursor: pointer;
+    }
+
+    /* ── Buttons ──────────────────────────────────────────────────────── */
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 14px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: opacity 0.15s, background 0.15s;
+    }
+
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-save {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-save:hover:not(:disabled) { background: var(--accent-dim); }
+
+    .btn-test {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--text-dim);
+    }
+
+    .btn-test:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ── Result messages ──────────────────────────────────────────────── */
+    .result {
+      font-size: 0.8rem;
+      padding: 6px 10px;
+      border-radius: 6px;
+      display: none;
+    }
+
+    .result.show { display: block; }
+
+    .result-ok {
+      background: rgba(76, 175, 125, 0.1);
+      border: 1px solid rgba(76, 175, 125, 0.25);
+      color: var(--green);
+    }
+
+    .result-err {
+      background: rgba(224, 85, 85, 0.1);
+      border: 1px solid rgba(224, 85, 85, 0.25);
+      color: var(--red);
+    }
+
+    .result-info {
+      background: rgba(124, 106, 245, 0.08);
+      border: 1px solid rgba(124, 106, 245, 0.2);
+      color: var(--accent);
+    }
+
+    /* ── Divider ──────────────────────────────────────────────────────── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 0;
+    }
+
+    /* ── Hint text ────────────────────────────────────────────────────── */
+    .hint {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Scrollbar ────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <div class="app-header">
+    <span style="font-size:1.4rem">🎨</span>
+    <div>
+      <h1>Commission Manager Companion</h1>
+      <div class="subtitle">Configuración de plataformas</div>
+    </div>
+    <span id="status-badge" class="disconnected">Sin sesión</span>
+  </div>
+
+  <!-- ── Auth section ──────────────────────────────────────────────────────── -->
+  <div class="section" id="sec-auth">
+    <div class="section-header" onclick="toggleSection('sec-auth')">
+      <span class="section-icon">🔐</span>
+      <span class="section-title">Cuenta</span>
+      <span class="section-subtitle" id="auth-subtitle">Inicia sesión para activar el polling</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <!-- Not logged in -->
+      <div id="auth-loggedout">
+        <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">
+          Inicia sesión con la misma cuenta Google que usas en la app web.
+          La companion app usará tu User ID para recoger los jobs de publicación.
+        </p>
+        <div class="btn-row">
+          <button class="btn-save" id="btn-google-login" onclick="handleGoogleLogin()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            Iniciar sesión con Google
+          </button>
+        </div>
+        <div id="result-auth" class="result" style="margin-top:8px"></div>
+      </div>
+
+      <!-- Logged in -->
+      <div id="auth-loggedin" style="display:none">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:1.1rem">👤</div>
+          <div>
+            <div id="auth-email" style="font-weight:600;font-size:0.9rem"></div>
+            <div id="auth-userid" style="font-size:0.72rem;color:var(--text-dim);font-family:monospace"></div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn-test" onclick="handleLogout()">🚪 Cerrar sesión</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── e621 ──────────────────────────────────────────────────────────── -->
+  <div class="section collapsed" id="sec-e621">
+    <div class="section-header" onclick="toggleSection('sec-e621')">
+      <span class="section-icon">🐾</span>
+      <span class="section-title">e621</span>
+      <span class="section-subtitle">username + API key</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="field-row">
+        <div class="field">
+          <label for="e621-user">Username</label>
+          <input type="text" id="e621-user" placeholder="tu_usuario" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="e621-key">API Key</label>
+          <input type="password" id="e621-key" placeholder="API key de e621" autocomplete="off" />
+        </div>
+      </div>
+      <div class="toggle-row">
+        <input type="checkbox" id="e621-enabled" />
+        <label for="e621-enabled">Habilitar esta plataforma</label>
+      </div>
+      <div class="btn-row">
+        <button class="btn-save" onclick="saveSection('e621')">💾 Guardar</button>
+        <button class="btn-test" id="test-btn-e621" onclick="testPlatform('e621')">🧪 Probar</button>
+      </div>
+      <div id="result-e621" class="result"></div>
+    </div>
+  </div>
+
+  <!-- ── Inkbunny ───────────────────────────────────────────────────────── -->
+  <div class="section collapsed" id="sec-inkbunny">
+    <div class="section-header" onclick="toggleSection('sec-inkbunny')">
+      <span class="section-icon">🐇</span>
+      <span class="section-title">Inkbunny</span>
+      <span class="section-subtitle">username + password</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="field-row">
+        <div class="field">
+          <label for="ib-user">Username</label>
+          <input type="text" id="ib-user" placeholder="tu_usuario" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="ib-pass">Password</label>
+          <input type="password" id="ib-pass" placeholder="contraseña" autocomplete="off" />
+        </div>
+      </div>
+      <div class="toggle-row">
+        <input type="checkbox" id="ib-enabled" />
+        <label for="ib-enabled">Habilitar esta plataforma</label>
+      </div>
+      <div class="btn-row">
+        <button class="btn-save" onclick="saveSection('inkbunny')">💾 Guardar</button>
+        <button class="btn-test" id="test-btn-inkbunny" onclick="testPlatform('inkbunny')">🧪 Probar</button>
+      </div>
+      <div id="result-inkbunny" class="result"></div>
+    </div>
+  </div>
+
+  <!-- ── Weasyl ─────────────────────────────────────────────────────────── -->
+  <div class="section collapsed" id="sec-weasyl">
+    <div class="section-header" onclick="toggleSection('sec-weasyl')">
+      <span class="section-icon">🦊</span>
+      <span class="section-title">Weasyl</span>
+      <span class="section-subtitle">API key</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="field">
+        <label for="weasyl-key">API Key</label>
+        <input type="password" id="weasyl-key" placeholder="API key de Weasyl" autocomplete="off" />
+      </div>
+      <div class="toggle-row">
+        <input type="checkbox" id="weasyl-enabled" />
+        <label for="weasyl-enabled">Habilitar esta plataforma</label>
+      </div>
+      <div class="btn-row">
+        <button class="btn-save" onclick="saveSection('weasyl')">💾 Guardar</button>
+        <button class="btn-test" id="test-btn-weasyl" onclick="testPlatform('weasyl')">🧪 Probar</button>
+      </div>
+      <div id="result-weasyl" class="result"></div>
+    </div>
+  </div>
+
+  <!-- ── Bluesky ────────────────────────────────────────────────────────── -->
+  <div class="section collapsed" id="sec-bluesky">
+    <div class="section-header" onclick="toggleSection('sec-bluesky')">
+      <span class="section-icon">🦋</span>
+      <span class="section-title">Bluesky</span>
+      <span class="section-subtitle">handle + app password</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="field-row">
+        <div class="field">
+          <label for="bsky-handle">Handle</label>
+          <input type="text" id="bsky-handle" placeholder="usuario.bsky.social" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="bsky-pass">App Password</label>
+          <input type="password" id="bsky-pass" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off" />
+        </div>
+      </div>
+      <span class="hint">Genera un App Password en bsky.app → Settings → App Passwords. No uses tu contraseña principal.</span>
+      <div class="toggle-row">
+        <input type="checkbox" id="bsky-enabled" />
+        <label for="bsky-enabled">Habilitar esta plataforma</label>
+      </div>
+      <div class="btn-row">
+        <button class="btn-save" onclick="saveSection('bluesky')">💾 Guardar</button>
+        <button class="btn-test" id="test-btn-bluesky" onclick="testPlatform('bluesky')">🧪 Probar</button>
+      </div>
+      <div id="result-bluesky" class="result"></div>
+    </div>
+  </div>
+
+  <!-- ── Telegram ───────────────────────────────────────────────────────── -->
+  <div class="section collapsed" id="sec-telegram">
+    <div class="section-header" onclick="toggleSection('sec-telegram')">
+      <span class="section-icon">✈️</span>
+      <span class="section-title">Telegram</span>
+      <span class="section-subtitle">bot token + chat ID</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="field">
+        <label for="tg-token">Bot Token</label>
+        <input type="password" id="tg-token" placeholder="123456:ABC-DEF..." autocomplete="off" />
+        <span class="hint">Obtén el token hablando con @BotFather en Telegram.</span>
+      </div>
+      <div class="field">
+        <label for="tg-chatid">Chat ID / Channel ID</label>
+        <input type="text" id="tg-chatid" placeholder="-100123456789 o @mi_canal" autocomplete="off" />
+        <span class="hint">Para canales públicos usa @nombre_canal. Para grupos/canales privados, el ID numérico con -100 al inicio.</span>
+      </div>
+      <div class="toggle-row">
+        <input type="checkbox" id="tg-enabled" />
+        <label for="tg-enabled">Habilitar esta plataforma</label>
+      </div>
+      <div class="btn-row">
+        <button class="btn-save" onclick="saveSection('telegram')">💾 Guardar</button>
+        <button class="btn-test" id="test-btn-telegram" onclick="testPlatform('telegram')">🧪 Probar bot</button>
+      </div>
+      <div id="result-telegram" class="result"></div>
+    </div>
+  </div>
+
+  <!-- ── Discord ────────────────────────────────────────────────────────── -->
+  <div class="section collapsed" id="sec-discord">
+    <div class="section-header" onclick="toggleSection('sec-discord')">
+      <span class="section-icon">🎮</span>
+      <span class="section-title">Discord</span>
+      <span class="section-subtitle">webhook URL</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="field">
+        <label for="dc-webhook">Webhook URL</label>
+        <input type="password" id="dc-webhook" placeholder="https://discord.com/api/webhooks/..." autocomplete="off" />
+        <span class="hint">Crea un webhook en tu canal: Editar canal → Integraciones → Webhooks → Nuevo webhook.</span>
+      </div>
+      <div class="toggle-row">
+        <input type="checkbox" id="dc-enabled" />
+        <label for="dc-enabled">Habilitar esta plataforma</label>
+      </div>
+      <div class="btn-row">
+        <button class="btn-save" onclick="saveSection('discord')">💾 Guardar</button>
+        <button class="btn-test" id="test-btn-discord" onclick="testPlatform('discord')">🧪 Probar webhook</button>
+      </div>
+      <div id="result-discord" class="result"></div>
+    </div>
+  </div>
+
+</div><!-- /.app -->
+
+<script src="settings.js"></script>
+</body>
+</html>
