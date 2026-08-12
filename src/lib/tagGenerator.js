@@ -83,11 +83,14 @@ Rules:
  * @throws {ConfigError} si falta la API Key de Mistral
  */
 export async function generateTags(imageUrl) {
-  const { mistralApiKey } = getConfig()
+  const cfg = getConfig()
+  const mistralApiKey = cfg.mistralApiKey
+
+  console.debug('[tagGenerator] config keys:', Object.keys(cfg).filter(k => k.includes('mistral') || k.includes('api')))
 
   if (!mistralApiKey) {
     throw new ConfigError(
-      'Configura tu API Key de Mistral en Conexiones para generar tags automáticos.'
+      'Configura tu API Key de Mistral en Conexiones → Mistral AI y haz clic en Guardar.'
     )
   }
 

@@ -332,20 +332,21 @@ export default function ConnectionsPage() {
     setMistralTesting(true)
     setMistralTestResult(null)
     try {
-      // Call Mistral models endpoint — lightweight, no image needed
-      const res = await fetch('https://api.mistral.ai/v1/models', {
-        headers: { Authorization: `Bearer ${key}` },
+      // Test with a minimal chat completion — most reliable way to verify the key
+      const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'pixtral-large-latest',
+          max_tokens: 5,
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
       })
       if (res.ok) {
-        const data = await res.json()
-        // Check pixtral is available
-        const hasPixtral = data.data?.some(m => m.id?.includes('pixtral'))
-        setMistralTestResult({
-          ok: true,
-          msg: hasPixtral
-            ? '✅ Conectado — Pixtral Large disponible para análisis NSFW'
-            : '✅ Conectado (Pixtral Large no encontrado — verifica tu plan)',
-        })
+        setMistralTestResult({ ok: true, msg: '✅ Pixtral Large conectado y listo para generar tags' })
       } else {
         const body = await res.json().catch(() => ({}))
         setMistralTestResult({ ok: false, msg: `❌ ${body?.message || `HTTP ${res.status}`}` })

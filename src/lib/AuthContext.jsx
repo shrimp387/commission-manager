@@ -96,7 +96,8 @@ async function seedLocalStoreFromSupabase(userId) {
         sectionBgs: profile.section_bgs ?? {},
         sectionIcons: profile.section_icons ?? {},
         telegramStickerSets: profile.telegram_sticker_sets ?? [],
-      }}))
+        mistralApiKey: profile.mistral_api_key ?? existing.mistralApiKey ?? '',
+      }})))
     }
   } catch (e) { console.warn('[auth] profile seed failed', e) }
 

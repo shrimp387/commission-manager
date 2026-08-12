@@ -38,7 +38,7 @@ import { getCurrentUserId } from './db.js'
 function mapToRow(job, userId) {
   return {
     user_id:     userId,
-    task_id:     job.taskId     ?? null,
+    task_id:     job.taskId     ?? null,   // stored as TEXT, not UUID constraint
     task_name:   job.taskName   ?? null,
     image_url:   job.imageUrl,
     platforms:   job.platforms  ?? [],
@@ -46,7 +46,6 @@ function mapToRow(job, userId) {
     description: job.description ?? null,
     tags:        job.tags        ?? [],
     rating:      job.rating      ?? 'safe',
-    // status defaults to 'pending' via DB DEFAULT — no need to send it
   }
 }
 
