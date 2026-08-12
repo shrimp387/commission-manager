@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTaskStore } from '../store/taskStore.js'
 import { PRIORITY_OPTIONS, STAGE_OPTIONS } from '../config.js'
 import FieldPill from './FieldPill.jsx'
@@ -137,6 +138,7 @@ function InlineComments({ comments, onChange }) {
 
 /* ─── KANBAN CARD ───────────────────────────────────────────────── */
 function KanbanCard({ task, sectionId, onToggle, onDelete, onAdd, onRename, onDragStart, onOpenPublishPanel }) {
+  const navigate = useNavigate()
   const { getFields, updateField, ensureTask } = useTaskStore()
   const [editingName, setEditingName] = useState(false)
   const [nameVal, setNameVal] = useState(task.text)
@@ -471,12 +473,12 @@ function KanbanCard({ task, sectionId, onToggle, onDelete, onAdd, onRename, onDr
               disabled={!(fields.attachments || []).some(a => a.type?.startsWith('image/'))}
               title={
                 (fields.attachments || []).some(a => a.type?.startsWith('image/'))
-                  ? 'Preparar publicación en PostyBirb'
+                  ? 'Preparar publicación'
                   : 'Adjunta la imagen final antes de publicar'
               }
               onClick={e => {
                 e.stopPropagation()
-                onOpenPublishPanel?.(task.id)
+                navigate(`/publish/${task.id}`)
               }}
             >
               📢 Preparar publicación

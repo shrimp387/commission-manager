@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar.jsx'
 import StudioPage from './pages/StudioPage.jsx'
 import RequestsPage from './pages/RequestsPage.jsx'
 import PublicationsPage from './pages/PublicationsPage.jsx'
+import PublishPage from './pages/PublishPage.jsx'
 import PortfolioPage from './pages/PortfolioPage.jsx'
 import GuidePage from './pages/GuidePage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
@@ -122,6 +123,7 @@ function AppShell() {
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/stats"        element={<StatsPage />} />
           <Route path="/publications" element={<PublicationsPage />} />
+          <Route path="/publish/:taskId" element={<PublishPage />} />
           <Route path="*"            element={<Navigate to="/studio" replace />} />
         </Routes>
       </main>
