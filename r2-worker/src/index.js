@@ -1,14 +1,18 @@
 /**
- * Cloudflare Worker — R2 Storage Proxy for Commission Manager
+ * Cloudflare Worker — R2 Storage Proxy + Platform API Proxy for Commission Manager
  *
  * Routes:
- *   PUT  /upload/:path*     — Upload a file to R2
- *   GET  /file/:path*       — Get a signed URL or serve the file
- *   DELETE /file/:path*     — Delete a file from R2
+ *   PUT  /upload/:path*          — Upload a file to R2
+ *   GET  /file/:path*            — Serve file from R2
+ *   DELETE /file/:path*          — Delete a file from R2
+ *   GET  /list/:userId           — List files in R2
+ *   POST /proxy/e621/post        — Proxy a post submission to e621
+ *   GET  /proxy/e621/test        — Test e621 credentials
+ *   GET  /health                 — Health check
  *
- * Security: validates the Supabase JWT from the Authorization header
- * so only authenticated users can upload/delete their own files.
- * File paths are namespaced by userId: <userId>/<folder>/<filename>
+ * Security: validates the Supabase JWT from the Authorization header.
+ * Platform credentials are passed via X-Platform-User and X-Platform-Key headers
+ * and are NEVER stored in the Worker — they go straight to the platform API.
  */
 
 const ALLOWED_ORIGINS = [
@@ -213,6 +217,128 @@ export default {
     if (pathname === '/health') {
       return new Response(JSON.stringify({ ok: true, service: 'r2-proxy' }), {
         headers: { ...cors, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // ── E621 PROXY — TEST CREDENTIALS ───────────────────────────────────────
+    // GET /proxy/e621/test
+    // Headers: X-Platform-User, X-Platform-Key
+    if (request.method === 'GET' && pathname === '/proxy/e621/test') {
+      const userId = await getUserIdFromJWT(request.headers.get('Authorization'), env.SUPABASE_JWT_SECRET)
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const e621User = request.headers.get('X-Platform-User')
+      const e621Key  = request.headers.get('X-Platform-Key')
+      if (!e621User || !e621Key) {
+        return new Response(JSON.stringify({ error: 'Missing X-Platform-User or X-Platform-Key' }), {
+          status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Call e621 API to verify credentials
+      const basicAuth = btoa(`${e621User}:${e621Key}`)
+      const testRes = await fetch('https://e621.net/users/' + encodeURIComponent(e621User) + '.json', {
+        headers: {
+          'Authorization': `Basic ${basicAuth}`,
+          'User-Agent': 'CommissionManager/1.0 (by ' + e621User + ')',
+        }
+      })
+
+      if (!testRes.ok) {
+        return new Response(JSON.stringify({ ok: false, error: 'Credenciales inválidas o usuario no encontrado' }), {
+          status: 200, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const userData = await testRes.json()
+      return new Response(JSON.stringify({
+        ok: true,
+        username: userData.name,
+        level: userData.level_string,
+      }), {
+        status: 200, headers: { ...cors, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // ── E621 PROXY — CREATE POST ─────────────────────────────────────────────
+    // POST /proxy/e621/post
+    // Headers: X-Platform-User, X-Platform-Key
+    // Body: multipart/form-data with fields: file, tags, rating, description, sources
+    if (request.method === 'POST' && pathname === '/proxy/e621/post') {
+      const userId = await getUserIdFromJWT(request.headers.get('Authorization'), env.SUPABASE_JWT_SECRET)
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const e621User = request.headers.get('X-Platform-User')
+      const e621Key  = request.headers.get('X-Platform-Key')
+      if (!e621User || !e621Key) {
+        return new Response(JSON.stringify({ error: 'Missing X-Platform-User or X-Platform-Key' }), {
+          status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Parse the incoming form data
+      const incomingForm = await request.formData()
+
+      // Step 1: Upload file to e621 (get upload URL or direct upload)
+      // e621 API v1: POST /uploads.json
+      const uploadForm = new FormData()
+
+      const file = incomingForm.get('file')
+      const tags = incomingForm.get('tags') || ''
+      const rating = incomingForm.get('rating') || 's' // s=safe, q=questionable, e=explicit
+      const description = incomingForm.get('description') || ''
+      const sources = incomingForm.get('sources') || ''
+
+      if (!file) {
+        return new Response(JSON.stringify({ error: 'No file provided' }), {
+          status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      uploadForm.append('upload[file]', file)
+      uploadForm.append('upload[tag_string]', tags)
+      uploadForm.append('upload[rating]', rating)
+      uploadForm.append('upload[description]', description)
+      if (sources) {
+        sources.split('\n').forEach((src, i) => {
+          uploadForm.append(`upload[source]`, src.trim())
+        })
+      }
+
+      const basicAuth = btoa(`${e621User}:${e621Key}`)
+      const e621Res = await fetch('https://e621.net/uploads.json', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${basicAuth}`,
+          'User-Agent': 'CommissionManager/1.0 (by ' + e621User + ')',
+        },
+        body: uploadForm,
+      })
+
+      const e621Body = await e621Res.json()
+
+      if (!e621Res.ok) {
+        const errMsg = e621Body?.message || e621Body?.reason || JSON.stringify(e621Body)
+        return new Response(JSON.stringify({ ok: false, error: errMsg, status: e621Res.status }), {
+          status: 200, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      return new Response(JSON.stringify({
+        ok: true,
+        postId: e621Body.post_id ?? e621Body.id,
+        uploadId: e621Body.id,
+        url: e621Body.post_id ? `https://e621.net/posts/${e621Body.post_id}` : null,
+      }), {
+        status: 200, headers: { ...cors, 'Content-Type': 'application/json' }
       })
     }
 

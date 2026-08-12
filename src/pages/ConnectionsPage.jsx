@@ -14,6 +14,8 @@ import {
 } from '../utils/telegram.js'
 import { getTelegramConfig as getTelegramConfigDb } from '../lib/db.js'
 import { getConfig, setConfig } from '../store/appConfig.js'
+import { getPostyBirbAccounts } from '../lib/postybirb.js'
+import { testE621Credentials } from '../lib/platforms/e621.js'
 
 // ─── Telegram Sticker Manager (embedded) ──────────────────────────────────────
 
@@ -273,6 +275,25 @@ export default function ConnectionsPage() {
   const [gmailEmail, setGmailEmail] = useState(null)
   const [showGmailTest, setShowGmailTest] = useState(false)
 
+  // ── PostyBirb state ──
+  const [pbUrl, setPbUrl]           = useState('')
+  const [pbApiKey, setPbApiKey]     = useState('')
+  const [pbSaved, setPbSaved]       = useState(false)
+  const [pbUrlError, setPbUrlError] = useState(null)
+  const [pbTesting, setPbTesting]   = useState(false)
+  const [pbTestResult, setPbTestResult] = useState(null)
+
+  // ── OpenAI state ──
+  const [oaiKey, setOaiKey]         = useState('')
+  const [oaiSaved, setOaiSaved]     = useState(false)
+
+  // ── e621 state ──
+  const [e621User, setE621User]         = useState('')
+  const [e621Key,  setE621Key]          = useState('')
+  const [e621Saved, setE621Saved]       = useState(false)
+  const [e621Testing, setE621Testing]   = useState(false)
+  const [e621TestResult, setE621TestResult] = useState(null)
+
   // Load saved Telegram config on mount — try localStorage cache first, then Supabase
   useEffect(() => {
     async function loadTgConfig() {
@@ -302,6 +323,72 @@ export default function ConnectionsPage() {
       setGmailEmail(tokens?.userEmail ?? null)
     }
   }, [])
+
+  // Load PostyBirb and OpenAI config on mount
+  useEffect(() => {
+    const cfg = getConfig()
+    if (cfg.postybirbUrl)    setPbUrl(cfg.postybirbUrl)
+    if (cfg.postybirbApiKey) setPbApiKey(cfg.postybirbApiKey)
+    if (cfg.openaiApiKey)    setOaiKey(cfg.openaiApiKey)
+    if (cfg.e621Username)    setE621User(cfg.e621Username)
+    if (cfg.e621ApiKey)      setE621Key(cfg.e621ApiKey)
+  }, [])
+
+  // ── PostyBirb handlers ──────────────────────────────────────────────────
+  function handleSavePostyBirb() {
+    const trimmed = pbUrl.trim()
+    if (trimmed && !trimmed.startsWith('https://')) {
+      setPbUrlError('La URL debe usar HTTPS para funcionar correctamente.')
+      return
+    }
+    setPbUrlError(null)
+    setConfig('postybirbUrl', trimmed)
+    setConfig('postybirbApiKey', pbApiKey.trim())
+    setPbSaved(true)
+    setPbTestResult(null)
+    setTimeout(() => setPbSaved(false), 2500)
+  }
+
+  async function handleTestPostyBirb() {
+    setPbTesting(true)
+    setPbTestResult(null)
+    try {
+      const accounts = await getPostyBirbAccounts()
+      setPbTestResult({ ok: true, count: accounts.length })
+    } catch (err) {
+      setPbTestResult({ ok: false, msg: err?.message || 'Error desconocido' })
+    }
+    setPbTesting(false)
+  }
+
+  // ── OpenAI handlers ─────────────────────────────────────────────────────
+  function handleSaveOpenAI() {
+    setConfig('openaiApiKey', oaiKey.trim())
+    setOaiSaved(true)
+    setTimeout(() => setOaiSaved(false), 2500)
+  }
+
+  // ── e621 handlers ────────────────────────────────────────────────────────
+  function handleSaveE621() {
+    setConfig('e621Username', e621User.trim())
+    setConfig('e621ApiKey', e621Key.trim())
+    setE621Saved(true)
+    setE621TestResult(null)
+    setTimeout(() => setE621Saved(false), 2500)
+  }
+
+  async function handleTestE621() {
+    if (!e621User.trim() || !e621Key.trim()) return
+    setE621Testing(true)
+    setE621TestResult(null)
+    try {
+      const result = await testE621Credentials(e621User.trim(), e621Key.trim())
+      setE621TestResult(result)
+    } catch (err) {
+      setE621TestResult({ ok: false, error: err?.message || 'Error de conexión' })
+    }
+    setE621Testing(false)
+  }
 
   function handleSaveTelegram() {
     saveTelegramConfig(tgToken.trim(), tgChatId.trim())
@@ -497,6 +584,218 @@ export default function ConnectionsPage() {
                     </button>
                   </div>
                 </>
+              )}
+            </div>
+          </div>
+
+          {/* ── POSTYBIRB CARD ── */}
+          <div className="conn-card">
+            <div className="conn-card-header">
+              <div className="conn-card-icon" style={{ background: 'rgba(124,106,247,0.12)', color: '#7c6af7' }}>
+                🐦
+              </div>
+              <div>
+                <h2 className="conn-card-title">PostyBirb</h2>
+                <p className="conn-card-sub">Publica en múltiples plataformas artísticas</p>
+              </div>
+              {getConfig().postybirbUrl && (
+                <span className="conn-status conn-status--ok">● Configurado</span>
+              )}
+            </div>
+
+            <div className="conn-body">
+              <div className="conn-guide">
+                <p className="conn-guide-title">📋 Cómo configurar</p>
+                <ol className="conn-guide-steps">
+                  <li>Instala PostyBirb v4 en tu PC usando Docker</li>
+                  <li>Crea un Cloudflare Tunnel gratuito apuntando a <code>localhost:8080</code></li>
+                  <li>Pega la URL HTTPS del tunnel abajo (ej: <code>https://postybirb.tudominio.com</code>)</li>
+                  <li>La API Key es opcional — solo si configuraste contraseña en PostyBirb</li>
+                </ol>
+                <a
+                  href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="conn-guide-link"
+                >
+                  ¿Cómo configurar el Cloudflare Tunnel? →
+                </a>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">URL del Cloudflare Tunnel</label>
+                <input
+                  className="form-input"
+                  type="text"
+                  value={pbUrl}
+                  onChange={e => { setPbUrl(e.target.value); setPbUrlError(null); setPbTestResult(null) }}
+                  placeholder="https://postybirb.tudominio.com"
+                />
+                {pbUrlError && <p className="conn-error">{pbUrlError}</p>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">API Key <span className="conn-optional">(opcional)</span></label>
+                <input
+                  className="form-input"
+                  type="password"
+                  value={pbApiKey}
+                  onChange={e => { setPbApiKey(e.target.value); setPbTestResult(null) }}
+                  placeholder="Solo si configuraste contraseña en PostyBirb"
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="conn-actions">
+                <button
+                  className="btn-primary"
+                  onClick={handleSavePostyBirb}
+                  disabled={!pbUrl.trim()}
+                >
+                  {pbSaved ? '✓ Guardado' : '💾 Guardar'}
+                </button>
+                <button
+                  className="btn-outline"
+                  onClick={handleTestPostyBirb}
+                  disabled={pbTesting || !pbUrl.trim()}
+                >
+                  {pbTesting ? 'Probando...' : '🧪 Probar conexión'}
+                </button>
+              </div>
+
+              {pbTestResult && (
+                <p className={`test-result ${pbTestResult.ok ? 'test-result--ok' : 'test-result--err'}`}>
+                  {pbTestResult.ok
+                    ? `✅ PostyBirb conectado — ${pbTestResult.count} plataformas disponibles`
+                    : `❌ No se pudo conectar. Verifica que el Cloudflare Tunnel esté activo y la URL sea correcta.`}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* ── OPENAI CARD ── */}
+          <div className="conn-card">
+            <div className="conn-card-header">
+              <div className="conn-card-icon" style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399' }}>
+                🤖
+              </div>
+              <div>
+                <h2 className="conn-card-title">OpenAI</h2>
+                <p className="conn-card-sub">Generación automática de tags e621</p>
+              </div>
+              {getConfig().openaiApiKey && (
+                <span className="conn-status conn-status--ok">● Configurado</span>
+              )}
+            </div>
+
+            <div className="conn-body">
+              <div className="conn-guide">
+                <p className="conn-guide-title">📋 Para qué sirve</p>
+                <ul className="conn-guide-steps">
+                  <li>Analiza la imagen de tu obra con <strong>GPT-4o Vision</strong></li>
+                  <li>Genera tags automáticos en formato e621 (species, character, general...)</li>
+                  <li>Aparecen en el panel "Preparar publicación" listos para revisar</li>
+                  <li>Obtén tu API Key en <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">platform.openai.com</a></li>
+                </ul>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">API Key de OpenAI</label>
+                <input
+                  className="form-input"
+                  type="password"
+                  value={oaiKey}
+                  onChange={e => setOaiKey(e.target.value)}
+                  placeholder="sk-..."
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="conn-actions">
+                <button
+                  className="btn-primary"
+                  onClick={handleSaveOpenAI}
+                  disabled={!oaiKey.trim()}
+                >
+                  {oaiSaved ? '✓ Guardado' : '💾 Guardar'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── E621 CARD ── */}
+          <div className="conn-card">
+            <div className="conn-card-header">
+              <div className="conn-card-icon" style={{ background: 'rgba(0,153,255,0.12)', color: '#0099ff' }}>
+                🐾
+              </div>
+              <div>
+                <h2 className="conn-card-title">e621</h2>
+                <p className="conn-card-sub">Publicación directa de arte furry/SFW</p>
+              </div>
+              {getConfig().e621Username && getConfig().e621ApiKey && (
+                <span className="conn-status conn-status--ok">● Configurado</span>
+              )}
+            </div>
+
+            <div className="conn-body">
+              <div className="conn-guide">
+                <p className="conn-guide-title">📋 Cómo obtener tu API Key</p>
+                <ol className="conn-guide-steps">
+                  <li>Inicia sesión en <a href="https://e621.net" target="_blank" rel="noopener noreferrer">e621.net</a></li>
+                  <li>Ve a tu perfil → <strong>Manage API Access</strong></li>
+                  <li>Genera una nueva API Key</li>
+                  <li>Copia el nombre de usuario y la key abajo</li>
+                </ol>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Nombre de usuario en e621</label>
+                <input
+                  className="form-input"
+                  type="text"
+                  value={e621User}
+                  onChange={e => { setE621User(e.target.value); setE621TestResult(null) }}
+                  placeholder="tu_usuario"
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">API Key</label>
+                <input
+                  className="form-input"
+                  type="password"
+                  value={e621Key}
+                  onChange={e => { setE621Key(e.target.value); setE621TestResult(null) }}
+                  placeholder="LbvA2vcAuuDGdb1CouGXFcKJ..."
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="conn-actions">
+                <button
+                  className="btn-primary"
+                  onClick={handleSaveE621}
+                  disabled={!e621User.trim() || !e621Key.trim()}
+                >
+                  {e621Saved ? '✓ Guardado' : '💾 Guardar'}
+                </button>
+                <button
+                  className="btn-outline"
+                  onClick={handleTestE621}
+                  disabled={e621Testing || !e621User.trim() || !e621Key.trim()}
+                >
+                  {e621Testing ? 'Probando...' : '🧪 Probar conexión'}
+                </button>
+              </div>
+
+              {e621TestResult && (
+                <p className={`test-result ${e621TestResult.ok ? 'test-result--ok' : 'test-result--err'}`}>
+                  {e621TestResult.ok
+                    ? `✅ Conectado como ${e621TestResult.username} (${e621TestResult.level})`
+                    : `❌ ${e621TestResult.error || 'Credenciales inválidas'}`}
+                </p>
               )}
             </div>
           </div>

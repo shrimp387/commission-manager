@@ -6,6 +6,7 @@ import TaskContextMenu from './TaskContextMenu.jsx'
 import CompletionBanner from './CompletionBanner.jsx'
 import StickerOverlay from './StickerOverlay.jsx'
 import StickerPanel from './StickerPanel.jsx'
+import PublishPanel from './PublishPanel.jsx'
 import { getTelegramConfig, getTelegramFileUrl } from '../utils/telegram.js'
 import { isGmailConnected, sendDeliveryEmail } from '../utils/gmail.js'
 import { getConfig } from '../store/appConfig.js'
@@ -135,7 +136,7 @@ function InlineComments({ comments, onChange }) {
 }
 
 /* ─── KANBAN CARD ───────────────────────────────────────────────── */
-function KanbanCard({ task, sectionId, onToggle, onDelete, onAdd, onRename, onDragStart }) {
+function KanbanCard({ task, sectionId, onToggle, onDelete, onAdd, onRename, onDragStart, onOpenPublishPanel }) {
   const { getFields, updateField, ensureTask } = useTaskStore()
   const [editingName, setEditingName] = useState(false)
   const [nameVal, setNameVal] = useState(task.text)
@@ -461,6 +462,27 @@ function KanbanCard({ task, sectionId, onToggle, onDelete, onAdd, onRename, onDr
             </p>
           </div>
         )}
+
+        {/* ── Publish button — shown when stage is 'delivered' ── */}
+        {fields.stage === 'delivered' && (
+          <div className="publish-section" onClick={e => e.stopPropagation()}>
+            <button
+              className="publish-btn"
+              disabled={!(fields.attachments || []).some(a => a.type?.startsWith('image/'))}
+              title={
+                (fields.attachments || []).some(a => a.type?.startsWith('image/'))
+                  ? 'Preparar publicación en PostyBirb'
+                  : 'Adjunta la imagen final antes de publicar'
+              }
+              onClick={e => {
+                e.stopPropagation()
+                onOpenPublishPanel?.(task.id)
+              }}
+            >
+              📢 Preparar publicación
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Edit-mode overlay — covers the full card as a sibling (position:absolute) */}
@@ -490,7 +512,7 @@ function KanbanCard({ task, sectionId, onToggle, onDelete, onAdd, onRename, onDr
 }
 
 /* ─── KANBAN COLUMN ─────────────────────────────────────────────── */
-function KanbanColumn({ section, onToggle, onDelete, onAdd, onRename, onDrop, onReorder, isCustom, onDeleteSection, onRecolorSection, onClearSection, onRenameSection }) {
+function KanbanColumn({ section, onToggle, onDelete, onAdd, onRename, onDrop, onReorder, isCustom, onDeleteSection, onRecolorSection, onClearSection, onRenameSection, onOpenPublishPanel }) {
   const [isDragOver, setIsDragOver] = useState(false)
   const [adding, setAdding] = useState(false)
   const [text, setText] = useState('')
@@ -668,7 +690,7 @@ function KanbanColumn({ section, onToggle, onDelete, onAdd, onRename, onDrop, on
                 )}
                 <KanbanCard task={task} sectionId={section.id}
                   onToggle={onToggle} onDelete={onDelete} onAdd={onAdd} onRename={onRename}
-                  onDragStart={() => {}} />
+                  onDragStart={() => {}} onOpenPublishPanel={onOpenPublishPanel} />
                 {dropIndicator?.taskId === task.id && dropIndicator.position === 'below' && (
                   <div className="kanban-drop-line" />
                 )}
@@ -777,6 +799,14 @@ export default function KanbanBoard({ sections, loading, onToggle, onDelete, onA
     try { return JSON.parse(localStorage.getItem('kanban_custom_sections') || '[]') }
     catch { return [] }
   })
+
+  // ── Publish panel state ───────────────────────────────────────────────────
+  const [publishPanelTaskId, setPublishPanelTaskId] = useState(null)
+  const { getFields, data: taskStoreData } = useTaskStore()
+
+  function handleOpenPublishPanel(taskId) {
+    setPublishPanelTaskId(taskId)
+  }
 
   // ── Persist kanban config to BOTH localStorage AND Supabase ──────────────
   function persistKanban({ order, colors, custom, labels }) {
@@ -887,6 +917,7 @@ export default function KanbanBoard({ sections, loading, onToggle, onDelete, onA
             onRecolorSection={handleRecolor}
             onRenameSection={handleRenameSection}
             onClearSection={isCustom ? (id) => saveCustomSections(customSections.map(s => s.id === id ? { ...s, items: [] } : s)) : undefined}
+            onOpenPublishPanel={handleOpenPublishPanel}
           />
         )
       })}
@@ -894,6 +925,23 @@ export default function KanbanBoard({ sections, loading, onToggle, onDelete, onA
         ? <NewSectionForm onConfirm={handleConfirmNewSection} onCancel={() => setShowNewSectionForm(false)} />
         : <button className="kanban-add-section-btn" onClick={() => setShowNewSectionForm(true)}>+ Nueva sección</button>
       }
+
+      {/* Publish Panel overlay — mounted as sibling of the board */}
+      {publishPanelTaskId && (() => {
+        const allTasks = sections.flatMap(s => s.items)
+        const task = allTasks.find(t => t.id === publishPanelTaskId)
+        const fields = getFields(publishPanelTaskId)
+        if (!task) return null
+        return (
+          <PublishPanel
+            key={publishPanelTaskId}
+            taskId={publishPanelTaskId}
+            task={task}
+            fields={fields}
+            onClose={() => setPublishPanelTaskId(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

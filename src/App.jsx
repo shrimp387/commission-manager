@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'r
 import Sidebar from './components/Sidebar.jsx'
 import StudioPage from './pages/StudioPage.jsx'
 import RequestsPage from './pages/RequestsPage.jsx'
+import PublicationsPage from './pages/PublicationsPage.jsx'
 import PortfolioPage from './pages/PortfolioPage.jsx'
 import GuidePage from './pages/GuidePage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
@@ -24,6 +25,7 @@ import { isSupabaseReady } from './lib/supabase.js'
 import './styles/global.css'
 
 const ROUTE_TO_PAGE = {
+  '/publications': 'publications',
   '/': 'studio',
   '/studio': 'studio',
   '/requests': 'requests',
@@ -52,6 +54,7 @@ const PAGE_TO_ROUTE = {
   media: '/media',
   integrations: '/integrations',
   stats: '/stats',
+  publications: '/publications',
 }
 
 function AppShell() {
@@ -118,6 +121,7 @@ function AppShell() {
           <Route path="/media"        element={<MediaPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/stats"        element={<StatsPage />} />
+          <Route path="/publications" element={<PublicationsPage />} />
           <Route path="*"            element={<Navigate to="/studio" replace />} />
         </Routes>
       </main>

@@ -9,13 +9,14 @@ import { isSupabaseReady } from '../lib/supabase.js'
 import GlobalSearch from './GlobalSearch.jsx'
 
 const NAV_ITEMS = [
-  { id: 'studio',   icon: '🔭', label: 'Estudio de Comisiones' },
-  { id: 'requests', icon: '📋', label: 'Solicitudes de Comisión' },
-  { id: 'clients',  icon: '👥', label: 'Clientes' },
-  { id: 'archived', icon: '🗂', label: 'Archivados' },
-  { id: 'portfolio',icon: '🖼', label: 'Galería de Portafolio' },
-  { id: 'calendar', icon: '📅', label: 'Calendario' },
-  { id: 'guide',    icon: '📖', label: 'Guía del Estudio' },
+  { id: 'studio',       icon: '🔭', label: 'Estudio de Comisiones' },
+  { id: 'requests',     icon: '📋', label: 'Solicitudes de Comisión' },
+  { id: 'clients',      icon: '👥', label: 'Clientes' },
+  { id: 'archived',     icon: '🗂', label: 'Archivados' },
+  { id: 'portfolio',    icon: '🖼', label: 'Galería de Portafolio' },
+  { id: 'calendar',     icon: '📅', label: 'Calendario' },
+  { id: 'publications', icon: '📣', label: 'Publicaciones' },
+  { id: 'guide',        icon: '📖', label: 'Guía del Estudio' },
 ]
 
 const PLACEHOLDER_ITEMS = [

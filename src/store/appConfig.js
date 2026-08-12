@@ -41,6 +41,17 @@ const DEFAULTS = {
 
   // Nombres de Sticker Sets de Telegram guardados (Requirement 4)
   telegramStickerSets: [],
+
+  // PostyBirb integration (artwork-publish-pipeline)
+  postybirbUrl: '',
+  postybirbApiKey: '',
+
+  // OpenAI API key for tag generation (artwork-publish-pipeline)
+  openaiApiKey: '',
+
+  // e621 credentials (direct API publishing)
+  e621Username: '',
+  e621ApiKey: '',
 }
 
 let _config = { ...DEFAULTS }
@@ -78,6 +89,11 @@ function syncToSupabase() {
         section_bgs: _config.sectionBgs,
         section_icons: _config.sectionIcons,
         telegram_sticker_sets: _config.telegramStickerSets,
+        postybirb_url: _config.postybirbUrl,
+        postybirb_api_key: _config.postybirbApiKey,
+        openai_api_key: _config.openaiApiKey,
+        e621_username: _config.e621Username,
+        e621_api_key: _config.e621ApiKey,
       })
     } catch (e) {
       // Supabase not ready or offline — localStorage is the fallback
