@@ -345,8 +345,6 @@ export default {
     // ── WD-TAGGER PROXY ─────────────────────────────────────────────────────
     // POST /tag
     // Body JSON: { imageUrl: string, threshold?: number }
-    // Proxies to HuggingFace Inference API (no CORS issues, server-side).
-    // Requires auth.
     if (request.method === 'POST' && pathname === '/tag') {
       const userId = await getUserIdFromJWT(
         request.headers.get('Authorization'),
@@ -374,18 +372,49 @@ export default {
         })
       }
 
-      // Download the image server-side
-      const imgRes = await fetch(imageUrl)
-      if (!imgRes.ok) {
-        return new Response(JSON.stringify({ error: `Failed to download image: HTTP ${imgRes.status}` }), {
-          status: 502, headers: { ...cors, 'Content-Type': 'application/json' }
-        })
+      // Try to get image from R2 bucket directly first (most reliable)
+      // imageUrl format: https://pub-xxx.r2.dev/userId/filename or R2_PUBLIC_URL/key
+      let imgBuffer = null
+      let contentType = 'image/png'
+
+      // Case 1: URL points to this worker itself (/file/ route) — extract R2 key directly
+      const workerOwnUrl = `https://commission-manager-r2.commission-manager-studio.workers.dev/file/`
+      const r2PublicBase = env.R2_PUBLIC_URL?.replace(/\/$/, '') ?? ''
+
+      let r2Key = null
+      if (imageUrl.startsWith(workerOwnUrl)) {
+        // e.g. https://worker.../file/userId/attachments/img.png → userId/attachments/img.png
+        r2Key = imageUrl.slice(workerOwnUrl.length)
+      } else if (r2PublicBase && imageUrl.startsWith(r2PublicBase + '/')) {
+        r2Key = imageUrl.slice(r2PublicBase.length + 1)
       }
-      const imgBuffer = await imgRes.arrayBuffer()
-      const contentType = imgRes.headers.get('content-type') || 'image/png'
+
+      if (r2Key && env.R2) {
+        // Fetch directly from R2 bucket — no HTTP, no auth issues
+        const obj = await env.R2.get(r2Key)
+        if (obj) {
+          imgBuffer = await obj.arrayBuffer()
+          contentType = obj.httpMetadata?.contentType || 'image/png'
+        }
+      }
+
+      // Fallback: try HTTP fetch (for external URLs)
+      if (!imgBuffer) {
+        const imgRes = await fetch(imageUrl, {
+          headers: { 'User-Agent': 'CommissionManager/1.0' }
+        })
+        if (!imgRes.ok) {
+          return new Response(JSON.stringify({
+            error: `Failed to download image: HTTP ${imgRes.status} — URL: ${imageUrl} — R2 key tried: ${r2Key ?? 'none'}`
+          }), {
+            status: 502, headers: { ...cors, 'Content-Type': 'application/json' }
+          })
+        }
+        imgBuffer = await imgRes.arrayBuffer()
+        contentType = imgRes.headers.get('content-type') || 'image/png'
+      }
 
       // Call HuggingFace WD-Tagger
-      // Use token from env if available, otherwise use public access
       const hfHeaders = { 'Content-Type': contentType }
       if (env.HF_TOKEN) hfHeaders['Authorization'] = `Bearer ${env.HF_TOKEN}`
 
@@ -396,12 +425,11 @@ export default {
 
       if (!hfRes.ok) {
         const hfBody = await hfRes.json().catch(() => ({}))
-        // Model loading (cold start) — tell client to retry
         if (hfRes.status === 503) {
           return new Response(JSON.stringify({
             error: 'model_loading',
             estimated_time: hfBody.estimated_time ?? 20,
-            message: `WD-Tagger está cargando, intenta en ${Math.ceil(hfBody.estimated_time ?? 20)}s`
+            message: `WD-Tagger cargando, intenta en ${Math.ceil(hfBody.estimated_time ?? 20)}s`
           }), {
             status: 503, headers: { ...cors, 'Content-Type': 'application/json' }
           })
@@ -411,9 +439,7 @@ export default {
         })
       }
 
-      // predictions: [{ label: string, score: number }]
       const predictions = await hfRes.json()
-
       const tags = predictions
         .filter(p => p.score >= threshold)
         .sort((a, b) => b.score - a.score)
