@@ -98,14 +98,28 @@ async function publishInkbunny(job, credentials) {
     throw new Error(uploadData?.error_message || `Error al subir archivo a Inkbunny: HTTP ${uploadRes.status}`)
   }
 
-  // Step 3 — Edit submission metadata
+  // Step 3 — Edit submission metadata + publish (visibility=yes)
+  // Map rating to Inkbunny's content rating system:
+  //   guest_block=no → accessible publicly
+  //   type: '1'      → Picture/Pinup
+  const ratingMap = {
+    safe:         { tag_list_two_tagsintext: '0', tag_list_three_tagsintext: '0' },
+    questionable: { tag_list_two_tagsintext: '1', tag_list_three_tagsintext: '0' },
+    explicit:     { tag_list_two_tagsintext: '1', tag_list_three_tagsintext: '1' },
+  }
+  const ratingFields = ratingMap[job.rating] ?? ratingMap.safe
+
   const editParams = new URLSearchParams({
     sid,
     submission_id: submissionId,
     title: job.title ?? '',
     desc: job.description ?? '',
     keywords: (job.tags ?? []).join(' '),
-    type: '1', // 1 = picture/pinup
+    type: '1',                     // 1 = Picture/Pinup
+    visibility: 'yes',             // ← publish immediately (not draft)
+    notify_followers: 'yes',       // ← notify watchers
+    guest_block: 'no',             // ← allow guest access
+    ...ratingFields,
   })
 
   const editRes = await fetch(`${IB_BASE}/api_editsubmission.php`, {
@@ -120,7 +134,9 @@ async function publishInkbunny(job, credentials) {
     throw new Error(editData?.error_message || `Error al editar submission en Inkbunny: HTTP ${editRes.status}`)
   }
 
-  return { ok: true, url: `${IB_BASE}/s/${submissionId}` }
+  const submissionUrl = `${IB_BASE}/s/${submissionId}`
+  console.log(`[inkbunny] ✅ Published: ${submissionUrl}`)
+  return { ok: true, url: submissionUrl }
 }
 
 /**

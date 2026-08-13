@@ -17,7 +17,7 @@ import { useTaskStore } from '../store/taskStore.js'
 import { identifyHighResAttachment, generateTags, normalizeTag, ConfigError } from '../lib/tagGenerator.js'
 import { insertPublishJob } from '../lib/publishJobsDb.js'
 import { getCurrentUserId } from '../lib/db.js'
-import { getConfig } from '../store/appConfig.js'
+import { getConfig, setConfig } from '../store/appConfig.js'
 
 // ── Step bar (same pattern as CommissionForm) ────────────────────────────────
 
@@ -130,6 +130,14 @@ export default function PublishPage() {
   const [sendError,    setSendError]    = useState(null)
   const [sendSuccess,  setSendSuccess]  = useState(false)
 
+  // ── Tag backend state ───────────────────────────────────────────────────────
+  const [tagBackend, setTagBackendState] = useState(() => getConfig().tagBackend ?? 'wdtagger')
+
+  function handleBackendChange(val) {
+    setTagBackendState(val)
+    setConfig('tagBackend', val)
+  }
+
   // ── Auto-generate tags when entering step 2 ─────────────────────────────────
   useEffect(() => {
     if (step !== 2 || !highRes || tags.length > 0) return
@@ -140,7 +148,7 @@ export default function PublishPage() {
     setLoadingTags(true)
     setTagsError(null)
     try {
-      const generated = await generateTags(highRes.url)
+      const generated = await generateTags(highRes.url, tagBackend)
       setTags(generated)
     } catch (err) {
       if (err instanceof ConfigError) {
@@ -292,23 +300,36 @@ export default function PublishPage() {
                 <h2 className="pub-section-title">Tags e621</h2>
                 <p className="pub-section-sub">
                   {loadingTags
-                    ? 'Analizando imagen con Mistral Pixtral...'
+                    ? 'Analizando imagen...'
                     : `${tags.length} tags generados`}
                 </p>
               </div>
-              <button
-                className="pub-regen-btn"
-                onClick={generateTagsAuto}
-                disabled={loadingTags || !highRes}
-              >
-                🔄 Regenerar con IA
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                {/* Backend selector */}
+                <select
+                  className="pub-tag-input"
+                  style={{ fontSize: '0.78rem', padding: '0.35rem 0.55rem', width: 'auto' }}
+                  value={tagBackend}
+                  onChange={e => handleBackendChange(e.target.value)}
+                  title="Motor de generación de tags"
+                >
+                  <option value="wdtagger">🐾 WD-Tagger (gratis, NSFW)</option>
+                  <option value="mistral">🧠 Mistral Pixtral</option>
+                </select>
+                <button
+                  className="pub-regen-btn"
+                  onClick={generateTagsAuto}
+                  disabled={loadingTags || !highRes}
+                >
+                  🔄 Regenerar
+                </button>
+              </div>
             </div>
 
             {loadingTags && (
               <div className="pub-loading">
                 <div className="mini-spinner" />
-                <span>Mistral Pixtral analizando tu obra...</span>
+                <span>Analizando imagen...</span>
               </div>
             )}
 

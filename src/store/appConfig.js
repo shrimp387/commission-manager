@@ -47,6 +47,9 @@ const DEFAULTS = {
 
   // Mistral model selection
   mistralModel: 'pixtral-large-latest',
+
+  // Tag generation backend: 'wdtagger' (default, free, no censorship) | 'mistral'
+  tagBackend: 'wdtagger',
 }
 
 let _config = { ...DEFAULTS }

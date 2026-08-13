@@ -1,18 +1,20 @@
 /**
- * tagGenerator.js — Generación automática de tags estilo e621 con Mistral Vision API.
+ * tagGenerator.js — Generación automática de tags estilo e621.
+ *
+ * Backends disponibles:
+ *   1. WD-Tagger (HuggingFace) — gratis, sin censura, especializado en arte furry/NSFW
+ *   2. Mistral Vision (Pixtral) — requiere plan de pago, puede censurar NSFW
  *
  * Exports:
  *   normalizeTag(s)                        — función pura de normalización
  *   identifyHighResAttachment(attachments) — selecciona el adjunto imagen de mayor tamaño
- *   generateTags(imageUrl)                 — genera tags con Mistral Pixtral (NSFW-aware)
+ *   generateTags(imageUrl)                 — genera tags (usa WD-Tagger por defecto)
  *   parseTags(text)                        — parsea texto libre en array de tags normalizados
- *   ConfigError                            — error lanzado cuando falta API Key
+ *   ConfigError                            — error lanzado cuando falta configuración
  */
 import { getConfig } from '../store/appConfig.js'
 
-const MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions'
-const TAG_TIMEOUT_MS  = 20_000
-const MAX_TAGS        = 200
+const MAX_TAGS = 200
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 
@@ -27,7 +29,6 @@ export class ConfigError extends Error {
 
 /**
  * Normaliza un tag al formato e621.
- * ÚNICA fuente de verdad — no duplicar en otros módulos.
  */
 export function normalizeTag(s) {
   if (typeof s !== 'string') return ''
@@ -46,7 +47,98 @@ export function identifyHighResAttachment(attachments) {
   )
 }
 
-// ── Tag generation ────────────────────────────────────────────────────────────
+// ── WD-Tagger (HuggingFace Inference API) ────────────────────────────────────
+// Modelo: SmilingWolf/wd-v1-4-swinv2-tagger-v2
+// Especializado en arte anime/furry, sin censura NSFW.
+// API pública gratuita de HuggingFace (rate limit generoso).
+
+const WD_TAGGER_URL = 'https://api-inference.huggingface.co/models/SmilingWolf/wd-v1-4-swinv2-tagger-v2'
+const WD_TIMEOUT_MS = 30_000
+// Umbral mínimo de confianza para incluir un tag (0-1)
+const WD_THRESHOLD = 0.35
+
+/**
+ * Descarga una imagen desde una URL y devuelve el blob.
+ */
+async function fetchImageBlob(url) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), WD_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, { signal: controller.signal })
+    clearTimeout(timer)
+    if (!res.ok) throw new Error(`Error al descargar imagen: HTTP ${res.status}`)
+    return await res.blob()
+  } catch (err) {
+    clearTimeout(timer)
+    if (err.name === 'AbortError') throw new Error('Timeout al descargar imagen para WD-Tagger')
+    throw err
+  }
+}
+
+/**
+ * Genera tags con WD-Tagger vía HuggingFace Inference API.
+ * No requiere API key (acceso público gratuito).
+ *
+ * @param {string} imageUrl — URL pública de la imagen
+ * @returns {Promise<string[]>} array de tags normalizados
+ */
+async function generateTagsWDTagger(imageUrl) {
+  // Descargamos la imagen primero porque HF Inference API acepta binary blob
+  const blob = await fetchImageBlob(imageUrl)
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), WD_TIMEOUT_MS)
+
+  try {
+    const res = await fetch(WD_TAGGER_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': blob.type || 'image/png',
+        // HuggingFace Inference API sin token funciona con rate limit generoso.
+        // Si el usuario tiene un HF token puede agregarlo en el futuro.
+      },
+      body: blob,
+    })
+
+    if (!res.ok) {
+      // El modelo puede estar cargando (503) — HF lo indica con loading message
+      const body = await res.json().catch(() => ({}))
+      if (res.status === 503 && body?.estimated_time) {
+        throw new Error(`WD-Tagger está cargando (${Math.ceil(body.estimated_time)}s). Intenta de nuevo en un momento.`)
+      }
+      throw new Error(body?.error || `WD-Tagger HTTP ${res.status}`)
+    }
+
+    // Response: [{ label: string, score: number }, ...]
+    const predictions = await res.json()
+
+    if (!Array.isArray(predictions)) {
+      throw new Error('Respuesta inesperada de WD-Tagger')
+    }
+
+    return predictions
+      .filter(p => p.score >= WD_THRESHOLD)
+      .sort((a, b) => b.score - a.score)
+      .map(p => normalizeTag(p.label))
+      .filter(t => t.length > 0)
+      .slice(0, MAX_TAGS)
+
+  } catch (err) {
+    clearTimeout(timer)
+    if (err.name === 'AbortError') throw new Error('Timeout al generar tags con WD-Tagger')
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// ── Mistral Vision (fallback) ─────────────────────────────────────────────────
+
+const MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions'
+const MISTRAL_TIMEOUT_MS = 20_000
+
+const VISION_MODELS = new Set(['pixtral-12b-2409', 'pixtral-large-latest'])
 
 const TAG_PROMPT = `You are an expert e621 tagger. Analyze this artwork image in detail and generate as many accurate tags as possible in e621 format.
 
@@ -57,8 +149,8 @@ Include tags from these categories:
 - body: physical features (e.g. fur, scales, tail, ears, wings, claws, paws, mane)
 - character: character names if recognizable
 - gender: male, female, intersex, ambiguous_gender
-- anatomy: body parts visible (e.g. breasts, penis, vagina, nipples, butt, abs) — be explicit and accurate
-- sexual_acts: any sexual acts depicted (e.g. sex, oral, anal, penetration, masturbation, cum) — be explicit
+- anatomy: body parts visible — be explicit and accurate
+- sexual_acts: any sexual acts depicted — be explicit
 - clothing: clothed, partially_clothed, nude, naked
 - count: solo, duo, trio, group
 - pose: standing, lying, sitting, on_all_fours, spread_legs, etc.
@@ -71,29 +163,14 @@ Include tags from these categories:
 Rules:
 - Use underscores instead of spaces
 - Lowercase only
-- Be thorough — aim for 50-120 tags
-- Do NOT censor NSFW content — tag everything you see
+- Aim for 50-120 tags
+- Do NOT censor NSFW content
 - Format: tag1, tag2, tag3, ...`
 
-/**
- * Genera tags automáticos estilo e621 usando Mistral Pixtral (NSFW-aware).
- *
- * @param {string} imageUrl — URL pública de la imagen
- * @returns {Promise<string[]>} array de tags normalizados (máx. 200)
- * @throws {ConfigError} si falta la API Key de Mistral
- */
-// Models that support image/vision input
-const VISION_MODELS = new Set([
-  'pixtral-12b-2409',
-  'pixtral-large-latest',
-])
-
-export async function generateTags(imageUrl) {
+async function generateTagsMistral(imageUrl) {
   const cfg = getConfig()
   const mistralApiKey = cfg.mistralApiKey
   const mistralModel  = cfg.mistralModel || 'pixtral-large-latest'
-
-  console.debug('[tagGenerator] config keys:', Object.keys(cfg).filter(k => k.includes('mistral') || k.includes('api')))
 
   if (!mistralApiKey) {
     throw new ConfigError(
@@ -107,10 +184,8 @@ export async function generateTags(imageUrl) {
     )
   }
 
-  console.debug(`[tagGenerator] model=${mistralModel}, key=${mistralApiKey.slice(0, 4)}***, image=${imageUrl}`)
-
   const controller = new AbortController()
-  const timerId = setTimeout(() => controller.abort(), TAG_TIMEOUT_MS)
+  const timerId = setTimeout(() => controller.abort(), MISTRAL_TIMEOUT_MS)
 
   try {
     const res = await fetch(MISTRAL_API_URL, {
@@ -123,41 +198,54 @@ export async function generateTags(imageUrl) {
       body: JSON.stringify({
         model: mistralModel,
         max_tokens: 1000,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: TAG_PROMPT },
-              { type: 'image_url', image_url: { url: imageUrl } },
-            ],
-          },
-        ],
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: TAG_PROMPT },
+            { type: 'image_url', image_url: { url: imageUrl } },
+          ],
+        }],
       }),
     })
 
     if (!res.ok) {
-      let errMsg
-      try {
-        const body = await res.json()
-        errMsg = body.error?.message || `Error HTTP ${res.status}`
-      } catch {
-        errMsg = `Error HTTP ${res.status}: ${res.statusText}`
-      }
-      throw new Error(errMsg)
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.error?.message || `Error HTTP ${res.status}`)
     }
 
     const data = await res.json()
     const rawText = data.choices?.[0]?.message?.content ?? ''
     return parseTags(rawText)
   } catch (err) {
-    if (err.name === 'AbortError') {
-      throw new Error('Timeout al generar tags. Puedes agregar tags manualmente.')
-    }
+    if (err.name === 'AbortError') throw new Error('Timeout al generar tags con Mistral')
     if (err instanceof ConfigError) throw err
     throw err
   } finally {
     clearTimeout(timerId)
   }
+}
+
+// ── Main export ───────────────────────────────────────────────────────────────
+
+/**
+ * Genera tags automáticos estilo e621.
+ * Usa WD-Tagger por defecto (gratis, sin censura).
+ * Si el usuario tiene Mistral configurado con modelo Pixtral, lo usa como fallback o primario.
+ *
+ * @param {string} imageUrl — URL pública de la imagen
+ * @param {'wdtagger'|'mistral'} [backend] — fuerza un backend específico
+ * @returns {Promise<string[]>} array de tags normalizados (máx. 200)
+ */
+export async function generateTags(imageUrl, backend) {
+  const cfg = getConfig()
+  const resolvedBackend = backend ?? cfg.tagBackend ?? 'wdtagger'
+
+  if (resolvedBackend === 'mistral') {
+    return generateTagsMistral(imageUrl)
+  }
+
+  // WD-Tagger (default)
+  return generateTagsWDTagger(imageUrl)
 }
 
 /**
