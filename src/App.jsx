@@ -17,6 +17,7 @@ import MediaPage from './pages/MediaPage.jsx'
 import IntegrationsPage from './pages/IntegrationsPage.jsx'
 import StatsPage from './pages/StatsPage.jsx'
 import DebugPanel from './components/DebugPanel.jsx'
+import DebugConsole from './components/DebugConsole.jsx'
 import DeadlineNotifier from './components/DeadlineNotifier.jsx'
 import { applyConfig } from './store/appConfig.js'
 import { usePageBackground } from './hooks/usePageBackground.js'
@@ -137,6 +138,7 @@ export default function App() {
       <HashRouter>
         <AppShell />
         <DebugPanel />
+        <DebugConsole />
         <DeadlineNotifier />
       </HashRouter>
     </AuthProvider>

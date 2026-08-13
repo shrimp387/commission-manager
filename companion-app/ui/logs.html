@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Logs — Commission Manager Companion</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f1a;
+      color: #e0e0f0;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      margin-bottom: 20px;
+    }
+    
+    h1 {
+      color: #7c6af5;
+      font-size: 1.8rem;
+      margin-bottom: 8px;
+    }
+    
+    .subtitle {
+      color: #888;
+      font-size: 0.9rem;
+    }
+    
+    .refresh-btn {
+      background: #7c6af5;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 15px;
+      transition: opacity 0.2s;
+    }
+    
+    .refresh-btn:hover {
+      opacity: 0.85;
+    }
+    
+    .refresh-btn:active {
+      opacity: 0.7;
+    }
+    
+    .refresh-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .logs-container {
+      font-family: 'Courier New', 'Monaco', monospace;
+      font-size: 0.85rem;
+      background: #0d1117;
+      color: #c9d1d9;
+      padding: 15px;
+      border-radius: 8px;
+      height: 70vh;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      border: 1px solid #30363d;
+    }
+    
+    .log-line {
+      margin: 3px 0;
+      padding: 2px 0;
+      line-height: 1.4;
+    }
+    
+    .log-line.err {
+      color: #ff6b6b;
+      font-weight: 500;
+    }
+    
+    .log-line.warn {
+      color: #ffd43b;
+    }
+    
+    .log-line.log {
+      color: #51cf66;
+    }
+    
+    .empty-state {
+      text-align: center;
+      color: #666;
+      padding: 40px;
+      font-style: italic;
+    }
+    
+    .logs-container::-webkit-scrollbar {
+      width: 10px;
+    }
+    
+    .logs-container::-webkit-scrollbar-track {
+      background: #0d1117;
+    }
+    
+    .logs-container::-webkit-scrollbar-thumb {
+      background: #30363d;
+      border-radius: 5px;
+    }
+    
+    .logs-container::-webkit-scrollbar-thumb:hover {
+      background: #484f58;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📋 Logs en Tiempo Real</h1>
+      <div class="subtitle">Última actualización: <span id="last-update">—</span></div>
+    </div>
+
+    <button class="refresh-btn" id="refresh-btn">🔄 Actualizar Logs</button>
+    <div class="logs-container" id="logs">
+      <div class="empty-state">Cargando logs...</div>
+    </div>
+  </div>
+
+  <script src="logs.js"></script>
+</body>
+</html>

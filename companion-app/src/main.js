@@ -81,6 +81,7 @@ function createTray() {
 }
 
 function updateTrayMenu(status = 'idle') {
+  const pkg = require('../package.json')
   const statusLabel = {
     idle:      '⚪ Esperando jobs...',
     running:   '🟢 Publicando...',
@@ -89,10 +90,11 @@ function updateTrayMenu(status = 'idle') {
   }[status] || '⚪ Activo'
 
   const menu = Menu.buildFromTemplate([
-    { label: 'Commission Manager Companion', enabled: false },
+    { label: `Commission Manager Companion v${pkg.version}`, enabled: false },
     { label: statusLabel, enabled: false },
     { type: 'separator' },
     { label: '⚙ Configuración', click: openSettings },
+    { label: '📋 Ver Logs', click: openLogsWindow },
     { label: '🌐 Abrir app web', click: () => shell.openExternal('https://commission-manager-plum.vercel.app') },
     { type: 'separator' },
     { label: 'Salir', click: () => { app.quit() } }
@@ -101,6 +103,8 @@ function updateTrayMenu(status = 'idle') {
 }
 
 // ── Settings window ───────────────────────────────────────────────────────────
+let logsWindow = null
+
 function openSettings() {
   if (settingsWindow) {
     settingsWindow.focus()
@@ -123,6 +127,31 @@ function openSettings() {
 
   settingsWindow.on('closed', () => {
     settingsWindow = null
+  })
+}
+
+function openLogsWindow() {
+  if (logsWindow) {
+    logsWindow.focus()
+    return
+  }
+
+  logsWindow = new BrowserWindow({
+    width: 900,
+    height: 700,
+    title: 'Companion App — Logs',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+    autoHideMenuBar: true,
+  })
+
+  logsWindow.loadFile(path.join(__dirname, '..', 'ui', 'logs.html'))
+
+  logsWindow.on('closed', () => {
+    logsWindow = null
   })
 }
 
@@ -166,15 +195,20 @@ function startPolling() {
   const interval = store.get('pollInterval') || 5000
 
   async function poll() {
-    if (!supabase || !store.get('supabaseUserId')) return
+    if (!supabase || !store.get('supabaseUserId')) {
+      console.log('[poll] Skipped — no supabase or userId')
+      return
+    }
 
     try {
       const userId = store.get('supabaseUserId')
+      console.log(`[poll] 🔍 Polling for userId: ${userId}`)
 
       // Process tag requests first (fast, no publishing)
       await processTagRequests()
 
       // Fetch pending publish jobs
+      console.log('[poll] 📬 Querying publish_jobs...')
       const { data: jobs, error } = await supabase
         .from('publish_jobs')
         .select('*')
@@ -183,9 +217,20 @@ function startPolling() {
         .order('created_at', { ascending: true })
         .limit(5)
 
-      if (error) throw error
-      if (!jobs || jobs.length === 0) return
+      if (error) {
+        console.error('[poll] ❌ Supabase query error:', error)
+        throw error
+      }
+      
+      console.log(`[poll] 📊 Found ${jobs?.length ?? 0} pending jobs`)
+      
+      if (!jobs || jobs.length === 0) {
+        console.log('[poll] ✅ No pending jobs — waiting...')
+        return
+      }
 
+      console.log('[poll] 🎯 Jobs to process:', jobs.map(j => ({ id: j.id, platforms: j.platforms, title: j.title })))
+      
       updateTrayMenu('running')
 
       for (const job of jobs) {
@@ -195,6 +240,7 @@ function startPolling() {
       updateTrayMenu('idle')
     } catch (err) {
       console.error('[poll] error:', err.message)
+      updateTrayMenu('error')
     }
   }
 
@@ -205,13 +251,21 @@ function startPolling() {
 const { generateTagsWDTagger } = require('./wdTagger')
 
 // ── Tag requests polling ──────────────────────────────────────────────────────
-// The web app inserts tag_requests into Supabase.
-// The companion processes them locally (no CF IP blocks, no Mixed Content).
 async function processTagRequests() {
-  if (!supabase || !store.get('supabaseUserId')) return
+  if (!supabase || !store.get('supabaseUserId')) {
+    console.log('[tagReq] skipped — no supabase or userId')
+    return
+  }
   try {
     const userId = store.get('supabaseUserId')
-    const { data: requests } = await supabase
+    console.log(`[tagReq] polling for userId: ${userId}`)
+
+    // Check if we have an authenticated session
+    const { data: sessionData } = await supabase.auth.getSession()
+    const hasSession = !!sessionData?.session?.access_token
+    console.log(`[tagReq] has auth session: ${hasSession}`)
+
+    const { data: requests, error } = await supabase
       .from('tag_requests')
       .select('*')
       .eq('user_id', userId)
@@ -219,19 +273,26 @@ async function processTagRequests() {
       .order('created_at', { ascending: true })
       .limit(3)
 
+    if (error) {
+      console.error('[tagReq] SELECT error:', error.message, error.code)
+      return
+    }
+
+    console.log(`[tagReq] found ${requests?.length ?? 0} pending requests`)
     if (!requests || requests.length === 0) return
 
     for (const req of requests) {
-      // Mark as processing
+      console.log(`[tagReq] processing request ${req.id} for image: ${req.image_url}`)
       await supabase.from('tag_requests').update({ status: 'processing', updated_at: new Date().toISOString() }).eq('id', req.id)
       try {
         const hfToken = store.get('hfToken') || ''
+        console.log(`[tagReq] calling WD-Tagger, hfToken: ${hfToken ? 'set' : 'not set'}`)
         const tags = await generateTagsWDTagger(req.image_url, hfToken)
         await supabase.from('tag_requests').update({ status: 'done', tags, updated_at: new Date().toISOString() }).eq('id', req.id)
-        console.log(`[tagReq] Done ${req.id}: ${tags.length} tags`)
+        console.log(`[tagReq] ✅ Done ${req.id}: ${tags.length} tags`)
       } catch (err) {
+        console.error(`[tagReq] ❌ Error ${req.id}:`, err.message)
         await supabase.from('tag_requests').update({ status: 'error', error_msg: err.message, updated_at: new Date().toISOString() }).eq('id', req.id)
-        console.error(`[tagReq] Error ${req.id}:`, err.message)
       }
     }
   } catch (err) {
@@ -489,6 +550,23 @@ function startOAuthCallback() {
     console.warn('[oauth] server error:', e.message)
   })
 }
+
+// ── Dev Tools / Log window ────────────────────────────────────────────────────
+ipcMain.handle('get-logs', () => recentLogs)
+
+// Keep last 100 log lines in memory
+const recentLogs = []
+const _origLog = console.log
+const _origErr = console.error
+const _origWarn = console.warn
+function pushLog(level, args) {
+  const line = `[${new Date().toISOString().slice(11,19)}] ${level}: ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`
+  recentLogs.push(line)
+  if (recentLogs.length > 200) recentLogs.shift()
+}
+console.log  = (...a) => { _origLog(...a);  pushLog('LOG',  a) }
+console.error = (...a) => { _origErr(...a); pushLog('ERR',  a) }
+console.warn  = (...a) => { _origWarn(...a); pushLog('WARN', a) }
 
 // ── IPC handlers (for settings UI) ───────────────────────────────────────────
 ipcMain.handle('get-config', () => {

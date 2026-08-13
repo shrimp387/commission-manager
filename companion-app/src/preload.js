@@ -19,4 +19,7 @@ contextBridge.exposeInMainWorld('companion', {
   googleLogin:  ()              => ipcRenderer.invoke('google-login'),
   saveSession:  (session)       => ipcRenderer.invoke('save-session', session),
   logout:       ()              => ipcRenderer.invoke('logout'),
+
+  // Logs
+  getLogs:      ()              => ipcRenderer.invoke('get-logs'),
 })

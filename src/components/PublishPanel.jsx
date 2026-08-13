@@ -329,9 +329,18 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
 
       // ── Route B: companion app via publish_jobs in Supabase ─────────────
       if (companionSelected.length > 0) {
+        console.log('[PublishPanel] 🚀 Enviando job a companion app:', {
+          platforms: companionSelected,
+          taskId,
+          taskName: task?.text ?? '',
+          imageUrl: highRes.url,
+          title: title.trim(),
+          tags: tags.length,
+          userId: getCurrentUserId(),
+        })
         setSendStep('queuing')
         try {
-          await insertPublishJob({
+          const result = await insertPublishJob({
             taskId,
             taskName: task?.text ?? '',
             imageUrl: highRes.url,
@@ -341,8 +350,10 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
             tags,
             rating: 'safe',
           })
+          console.log('[PublishPanel] ✅ Job creado en Supabase:', result.id)
           publishedPlatforms.push(...companionSelected)
         } catch (err) {
+          console.error('[PublishPanel] ❌ Error al enviar job a companion:', err)
           errors.push(`companion: ${err?.message || 'Error al enviar job'}`)
         }
       }

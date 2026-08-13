@@ -1,7 +1,7 @@
 {
   "major": 1,
   "minor": 5,
-  "patch": 1,
+  "patch": 2,
   "history": [
     {
       "version": "v1.0.0",
@@ -73,6 +73,12 @@
       "version": "v1.5.1",
       "date": "2026-08-12T19:43:49.278660",
       "message": "fix(se añadio token de huggin face): ticket de huggin face ennw rangler",
+      "bump": "patch"
+    },
+    {
+      "version": "v1.5.2",
+      "date": "2026-08-12T22:02:15.763721",
+      "message": "fix(companion logs app logs): logs everywhere",
       "bump": "patch"
     }
   ]

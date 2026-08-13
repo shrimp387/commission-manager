@@ -157,7 +157,7 @@ Implementación completa del sistema de publicación de arte en múltiples plata
       - Mostrar `.result-ok` con "✅ Conectado como @<username/botName>" o `.result-err` con "❌ Error: <mensaje>"
     - _Requerimientos: 8.2, 8.3, 8.4, 8.5, 8.6_
 
-- [ ] 5. Integración en `PublishPanel.jsx` — ruta companion
+- [x] 5. Integración en `PublishPanel.jsx` — ruta companion
   - [x] 5.1 Añadir `publishJobsDb.js` como dependencia e importar en PublishPanel
     - Agregar import: `import { insertPublishJob } from '../lib/publishJobsDb.js'`
     - Definir constante `COMPANION_PLATFORM_IDS = new Set(['e621','inkbunny','weasyl','bluesky','telegram','discord'])`
@@ -198,7 +198,7 @@ Implementación completa del sistema de publicación de arte en múltiples plata
     - Actualizar el mensaje de éxito cuando hay jobs de companion: "✅ Job enviado a la companion app. La publicación se procesará en segundo plano."
     - _Requerimientos: 9.1, 9.2, 9.3, 9.5_
 
-- [ ] 6. Tests de propiedades y unidad
+- [x] 6. Tests de propiedades y unidad
   - [ ]* 6.1 Property 1: Validación de credenciales sin petición HTTP
     - Crear `companion-app/src/platforms/__tests__/platforms.test.js`
     - Para cada módulo (e621, inkbunny, weasyl, bluesky, telegram, discord): verificar que llamar a `publish*(job, {})` con credenciales vacías lanza error **sin realizar ninguna petición HTTP** (mockear `node-fetch` y verificar que no fue llamado)

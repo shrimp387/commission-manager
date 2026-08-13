@@ -88,22 +88,55 @@ function mapFromRow(row) {
  */
 export async function insertPublishJob(jobData) {
   const userId = getCurrentUserId()
-  if (!supabase) throw new Error('Supabase no disponible')
-  if (!userId)   throw new Error('Usuario no autenticado')
+  console.log('[publishJobsDb] 📝 insertPublishJob called:', {
+    userId,
+    platforms: jobData.platforms,
+    title: jobData.title,
+    imageUrl: jobData.imageUrl?.substring(0, 50) + '...',
+  })
+  
+  if (!supabase) {
+    console.error('[publishJobsDb] ❌ Supabase no disponible')
+    throw new Error('Supabase no disponible')
+  }
+  if (!userId) {
+    console.error('[publishJobsDb] ❌ Usuario no autenticado')
+    throw new Error('Usuario no autenticado')
+  }
+
+  const row = mapToRow(jobData, userId)
+  console.log('[publishJobsDb] 📤 Insertando en Supabase:', {
+    table: 'publish_jobs',
+    user_id: row.user_id,
+    platforms: row.platforms,
+    status: 'pending (default)',
+  })
 
   const { data, error } = await supabase
     .from('publish_jobs')
-    .insert(mapToRow(jobData, userId))
+    .insert(row)
     .select()
     .single()
 
   if (error) {
+    console.error('[publishJobsDb] ❌ Error de Supabase:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    })
     // RLS violation — user_id mismatch or missing auth
     if (error.code === '42501' || error.message?.includes('row-level security')) {
       throw new Error('No autorizado para crear jobs de publicación')
     }
     throw new Error(error.message ?? 'Error al crear el job de publicación')
   }
+
+  console.log('[publishJobsDb] ✅ Job insertado exitosamente:', {
+    id: data.id,
+    status: data.status,
+    created_at: data.created_at,
+  })
 
   return mapFromRow(data)
 }
