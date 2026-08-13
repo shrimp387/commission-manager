@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { getConfig, setConfig, setConfigMulti } from '../store/appConfig.js'
 import { useConfig } from '../hooks/useConfig.js'
 import PageBackgroundEditor from '../components/PageBackgroundEditor.jsx'
@@ -37,6 +37,106 @@ export default function SettingsPage() {
   const bannerRef = useRef(null)
   const iconRef = useRef(null)
   const bgRef = useRef(null)
+  
+  // Connection testing state
+  const [hfTokenInput, setHfTokenInput] = useState(config.hfToken || '')
+  const [mistralKeyInput, setMistralKeyInput] = useState(config.mistralApiKey || '')
+  const [testingHF, setTestingHF] = useState(false)
+  const [testingMistral, setTestingMistral] = useState(false)
+  const [hfTestResult, setHfTestResult] = useState(null)
+  const [mistralTestResult, setMistralTestResult] = useState(null)
+
+  // Update input fields when config changes
+  useEffect(() => {
+    setHfTokenInput(config.hfToken || '')
+    setMistralKeyInput(config.mistralApiKey || '')
+  }, [config.hfToken, config.mistralApiKey])
+
+  // Test HuggingFace connection
+  async function testHuggingFaceConnection() {
+    if (!hfTokenInput || !hfTokenInput.startsWith('hf_')) {
+      setHfTestResult({ ok: false, message: 'Token inválido. Debe empezar con hf_' })
+      setTimeout(() => setHfTestResult(null), 5000)
+      return
+    }
+
+    setTestingHF(true)
+    setHfTestResult(null)
+
+    try {
+      // Test with a simple model info request (doesn't require inference credits)
+      const response = await fetch('https://api-inference.huggingface.co/models/Poofy1/e621-tagger', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${hfTokenInput}`
+        }
+      })
+
+      if (response.ok) {
+        setHfTestResult({ ok: true, message: '✅ Conexión exitosa con HuggingFace' })
+      } else if (response.status === 401) {
+        setHfTestResult({ ok: false, message: '❌ Token inválido o revocado' })
+      } else if (response.status === 403) {
+        setHfTestResult({ ok: false, message: '❌ Token sin permisos suficientes' })
+      } else {
+        setHfTestResult({ ok: false, message: `❌ Error HTTP ${response.status}` })
+      }
+    } catch (err) {
+      setHfTestResult({ ok: false, message: `❌ Error de red: ${err.message}` })
+    } finally {
+      setTestingHF(false)
+      setTimeout(() => setHfTestResult(null), 5000)
+    }
+  }
+
+  // Test Mistral connection
+  async function testMistralConnection() {
+    if (!mistralKeyInput) {
+      setMistralTestResult({ ok: false, message: 'API Key vacía' })
+      setTimeout(() => setMistralTestResult(null), 5000)
+      return
+    }
+
+    setTestingMistral(true)
+    setMistralTestResult(null)
+
+    try {
+      // Test with list models endpoint (cheap, doesn't consume credits)
+      const response = await fetch('https://api.mistral.ai/v1/models', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${mistralKeyInput}`
+        }
+      })
+
+      if (response.ok) {
+        setMistralTestResult({ ok: true, message: '✅ Conexión exitosa con Mistral AI' })
+      } else if (response.status === 401) {
+        setMistralTestResult({ ok: false, message: '❌ API Key inválida' })
+      } else {
+        setMistralTestResult({ ok: false, message: `❌ Error HTTP ${response.status}` })
+      }
+    } catch (err) {
+      setMistralTestResult({ ok: false, message: `❌ Error de red: ${err.message}` })
+    } finally {
+      setTestingMistral(false)
+      setTimeout(() => setMistralTestResult(null), 5000)
+    }
+  }
+
+  // Save HuggingFace token
+  function saveHuggingFaceToken() {
+    setConfig('hfToken', hfTokenInput.trim())
+    setHfTestResult({ ok: true, message: '✅ Token guardado correctamente' })
+    setTimeout(() => setHfTestResult(null), 3000)
+  }
+
+  // Save Mistral key
+  function saveMistralKey() {
+    setConfig('mistralApiKey', mistralKeyInput.trim())
+    setMistralTestResult({ ok: true, message: '✅ API Key guardada correctamente' })
+    setTimeout(() => setMistralTestResult(null), 3000)
+  }
 
   function readFile(file, onResult) {
     if (!file) return
@@ -382,12 +482,48 @@ export default function SettingsPage() {
                 <input 
                   className="form-input"
                   type="password"
-                  value={config.hfToken || ''}
-                  onChange={e => setConfig('hfToken', e.target.value.trim())}
+                  value={hfTokenInput}
+                  onChange={e => setHfTokenInput(e.target.value.trim())}
                   placeholder="hf_..."
                   style={{ fontFamily: 'monospace' }}
                 />
-                {config.hfToken && (
+                
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                  <button
+                    className="btn-outline"
+                    onClick={testHuggingFaceConnection}
+                    disabled={testingHF || !hfTokenInput}
+                    style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+                  >
+                    {testingHF ? '⏳ Probando...' : '🔌 Probar conexión'}
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={saveHuggingFaceToken}
+                    disabled={!hfTokenInput || hfTokenInput === config.hfToken}
+                    style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+                  >
+                    💾 Guardar
+                  </button>
+                </div>
+
+                {/* Test result */}
+                {hfTestResult && (
+                  <p style={{ 
+                    fontSize: '0.85rem', 
+                    marginTop: '0.75rem',
+                    padding: '0.75rem',
+                    borderRadius: 'var(--radius-sm)',
+                    background: hfTestResult.ok ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    color: hfTestResult.ok ? 'var(--green)' : '#ef4444',
+                    border: `1px solid ${hfTestResult.ok ? 'var(--green)' : '#ef4444'}`
+                  }}>
+                    {hfTestResult.message}
+                  </p>
+                )}
+
+                {config.hfToken && hfTokenInput === config.hfToken && (
                   <p style={{ fontSize: '0.75rem', color: 'var(--green)', marginTop: '0.5rem' }}>
                     ✅ Token configurado ({config.hfToken.length} caracteres)
                   </p>
@@ -429,12 +565,48 @@ export default function SettingsPage() {
                 <input 
                   className="form-input"
                   type="password"
-                  value={config.mistralApiKey || ''}
-                  onChange={e => setConfig('mistralApiKey', e.target.value.trim())}
+                  value={mistralKeyInput}
+                  onChange={e => setMistralKeyInput(e.target.value.trim())}
                   placeholder="Mistral API Key..."
                   style={{ fontFamily: 'monospace' }}
                 />
-                {config.mistralApiKey && (
+                
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                  <button
+                    className="btn-outline"
+                    onClick={testMistralConnection}
+                    disabled={testingMistral || !mistralKeyInput}
+                    style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+                  >
+                    {testingMistral ? '⏳ Probando...' : '🔌 Probar conexión'}
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={saveMistralKey}
+                    disabled={!mistralKeyInput || mistralKeyInput === config.mistralApiKey}
+                    style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+                  >
+                    💾 Guardar
+                  </button>
+                </div>
+
+                {/* Test result */}
+                {mistralTestResult && (
+                  <p style={{ 
+                    fontSize: '0.85rem', 
+                    marginTop: '0.75rem',
+                    padding: '0.75rem',
+                    borderRadius: 'var(--radius-sm)',
+                    background: mistralTestResult.ok ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    color: mistralTestResult.ok ? 'var(--green)' : '#ef4444',
+                    border: `1px solid ${mistralTestResult.ok ? 'var(--green)' : '#ef4444'}`
+                  }}>
+                    {mistralTestResult.message}
+                  </p>
+                )}
+
+                {config.mistralApiKey && mistralKeyInput === config.mistralApiKey && (
                   <p style={{ fontSize: '0.75rem', color: 'var(--green)', marginTop: '0.5rem' }}>
                     ✅ API Key configurada
                   </p>
