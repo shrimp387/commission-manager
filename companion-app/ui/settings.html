@@ -351,14 +351,16 @@
       <div id="auth-loggedin" style="display:none">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
           <div style="width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:1.1rem">👤</div>
-          <div>
-            <div id="auth-email" style="font-weight:600;font-size:0.9rem"></div>
-            <div id="auth-userid" style="font-size:0.72rem;color:var(--text-dim);font-family:monospace"></div>
+          <div style="flex:1">
+            <div id="auth-email" style="font-weight:600;font-size:0.9rem;color:var(--text)"></div>
+            <div id="auth-name" style="font-size:0.75rem;color:var(--text-dim);margin-top:2px"></div>
           </div>
         </div>
         <div class="btn-row">
           <button class="btn-test" onclick="handleLogout()">🚪 Cerrar sesión</button>
+          <button class="btn-test" onclick="testConnection()">🔌 Probar conexión</button>
         </div>
+        <div id="result-connection" class="result" style="margin-top:8px"></div>
       </div>
     </div>
   </div>
@@ -417,16 +419,12 @@
         <input type="checkbox" id="ib-enabled" />
         <label for="ib-enabled">Habilitar esta plataforma</label>
       </div>
-      <div class="toggle-row">
-        <input type="checkbox" id="ib-useBrowser" />
-        <label for="ib-useBrowser">🌐 Usar automatización de navegador (abre Chrome, rellena todo)</label>
-      </div>
-      <span class="hint" style="margin-top:-8px">
-        Browser automation abre Chrome visiblemente, rellena título/descripción/tags automáticamente, y deja todo listo para que hagas clic en Submit.
+      <span class="hint" style="margin-top:4px">
+        Inkbunny publica via API directamente. Las submissions quedan en modo DRAFT para que revises antes de publicar manualmente.
       </span>
       <div class="btn-row">
         <button class="btn-save" onclick="saveSection('inkbunny')">💾 Guardar</button>
-        <button class="btn-test" id="test-btn-inkbunny" onclick="testPlatform('inkbunny')">🧪 Probar</button>
+        <button class="btn-test" id="test-btn-inkbunny" onclick="testPlatform('inkbunny')">🧪 Probar conexión</button>
       </div>
       <div id="result-inkbunny" class="result"></div>
     </div>

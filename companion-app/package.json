@@ -1,6 +1,6 @@
 {
   "name": "commission-manager-companion",
-  "version": "2.9.0",
+  "version": "3.0.0",
   "description": "Companion app for Commission Manager — publishes artwork to multiple platforms",
   "main": "src/main.js",
   "scripts": {

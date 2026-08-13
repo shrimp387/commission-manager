@@ -44,7 +44,6 @@ function buildConfig() {
     'platforms.inkbunny.username': v('ib-user'),
     'platforms.inkbunny.password': v('ib-pass'),
     'platforms.inkbunny.enabled':  cb('ib-enabled'),
-    'platforms.inkbunny.useBrowser': cb('ib-useBrowser'),
 
     // Weasyl
     'platforms.weasyl.apiKey':  v('weasyl-key'),
@@ -111,7 +110,6 @@ async function prefillForm() {
     setV('ib-user', ib.username)
     setV('ib-pass', ib.password)
     setCb('ib-enabled', ib.enabled)
-    setCb('ib-useBrowser', ib.useBrowser)
 
     // Weasyl
     const weasyl = cfg.platforms?.weasyl ?? {}
@@ -175,10 +173,19 @@ async function updateAuthUI() {
     if (status.userId) {
       if (loggedout) loggedout.style.display = 'none'
       if (loggedin)  loggedin.style.display  = 'block'
-      const emailEl  = document.getElementById('auth-email')
-      const useridEl = document.getElementById('auth-userid')
-      if (emailEl)  emailEl.textContent  = status.email || 'Sesión activa'
-      if (useridEl) useridEl.textContent = status.userId
+      
+      const emailEl = document.getElementById('auth-email')
+      const nameEl  = document.getElementById('auth-name')
+      
+      if (emailEl) {
+        emailEl.textContent = status.email || 'Sesión activa'
+      }
+      
+      if (nameEl) {
+        // Show user's name if available, otherwise show "Google account"
+        nameEl.textContent = status.name || 'Google account'
+      }
+      
       if (subtitle) subtitle.textContent = 'Sesión activa'
     } else {
       if (loggedout) loggedout.style.display = 'block'
@@ -239,6 +246,38 @@ async function handleLogout() {
 }
 window.handleLogout = handleLogout
 
+async function testConnection() {
+  const resultEl = document.getElementById('result-connection')
+  if (!resultEl) return
+  
+  resultEl.textContent = '⏳ Probando conexión a Supabase...'
+  resultEl.className = 'result result-info show'
+  
+  try {
+    const status = await window.companion.getStatus()
+    
+    if (status.connected && status.userId) {
+      resultEl.textContent = '✅ Conectado a Supabase correctamente'
+      resultEl.className = 'result result-ok show'
+    } else if (status.connected) {
+      resultEl.textContent = '⚠️ Conectado pero sin sesión activa'
+      resultEl.className = 'result result-err show'
+    } else {
+      resultEl.textContent = '❌ No conectado a Supabase'
+      resultEl.className = 'result result-err show'
+    }
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      resultEl.className = 'result'
+    }, 5000)
+  } catch (err) {
+    resultEl.textContent = `❌ Error: ${err.message}`
+    resultEl.className = 'result result-err show'
+  }
+}
+window.testConnection = testConnection
+
 // ── Save section ──────────────────────────────────────────────────────────────
 
 async function saveSection(sectionId) {
@@ -262,7 +301,7 @@ function buildCredentials(platform) {
     case 'e621':
       return { username: v('e621-user'), apiKey: v('e621-key') }
     case 'inkbunny':
-      return { username: v('ib-user'), password: v('ib-pass'), useBrowser: cb('ib-useBrowser') }
+      return { username: v('ib-user'), password: v('ib-pass') }
     case 'weasyl':
       return { apiKey: v('weasyl-key') }
     case 'bluesky':

@@ -536,19 +536,45 @@ function startOAuthCallback() {
       req.on('data', c => { body += c })
       req.on('end', async () => {
         try {
+          console.log('[oauth] 📨 Received session POST request')
           const { access_token, refresh_token } = JSON.parse(body)
-          if (access_token && supabase) {
-            const { data } = await supabase.auth.setSession({ access_token, refresh_token })
+          
+          if (!access_token) {
+            console.error('[oauth] ❌ No access_token in request body')
+            res.writeHead(400); res.end('missing access_token')
+            return
+          }
+          
+          console.log('[oauth] 🔑 Access token received, setting session...')
+          
+          if (supabase) {
+            const { data, error } = await supabase.auth.setSession({ access_token, refresh_token })
+            
+            if (error) {
+              console.error('[oauth] ❌ setSession error:', error.message)
+              res.writeHead(500); res.end(error.message)
+              return
+            }
+            
             const userId = data?.user?.id
+            const email = data?.user?.email
+            const name = data?.user?.user_metadata?.full_name || data?.user?.user_metadata?.name
+            
             if (userId) {
               store.set('supabaseUserId', userId)
               updateTrayMenu('idle')
-              console.log('[oauth] ✅ Logged in, userId:', userId)
+              console.log('[oauth] ✅ Session saved successfully')
+              console.log('[oauth] 👤 User:', { id: userId, email, name })
+            } else {
+              console.error('[oauth] ❌ No userId in session data')
             }
+          } else {
+            console.error('[oauth] ❌ Supabase client not available')
           }
+          
           res.writeHead(200); res.end('ok')
         } catch (e) {
-          console.error('[oauth] session error:', e.message)
+          console.error('[oauth] ❌ Exception in session handler:', e.message, e.stack)
           res.writeHead(500); res.end(e.message)
         }
       })
@@ -605,25 +631,54 @@ ipcMain.handle('test-platform', async (event, { platform, credentials }) => {
 
 ipcMain.handle('get-status', async () => {
   let email = null
+  let name = null
   if (supabase) {
     try {
-      const { data } = await supabase.auth.getUser()
-      email = data?.user?.email ?? null
-    } catch {}
+      console.log('[getStatus] 🔍 Fetching user info from Supabase...')
+      const { data, error } = await supabase.auth.getUser()
+      
+      if (error) {
+        console.error('[getStatus] ❌ Error fetching user:', error.message)
+      } else if (data?.user) {
+        email = data.user.email ?? null
+        // Try to get name from user_metadata (Google provides this)
+        name = data.user.user_metadata?.full_name || 
+               data.user.user_metadata?.name || 
+               null
+        console.log('[getStatus] ✅ User info:', { email, name, id: data.user.id })
+      } else {
+        console.log('[getStatus] ⚠️ No user data returned')
+      }
+    } catch (err) {
+      console.error('[getStatus] ❌ Exception:', err.message)
+    }
+  } else {
+    console.log('[getStatus] ⚠️ Supabase client not initialized')
   }
-  return {
+  
+  const status = {
     connected: !!supabase,
     userId: store.get('supabaseUserId'),
     email,
+    name,
     polling: !!pollTimer,
   }
+  
+  console.log('[getStatus] 📊 Returning status:', status)
+  return status
 })
 
 // ── Google OAuth via Supabase ─────────────────────────────────────────────────
 ipcMain.handle('google-login', async () => {
-  if (!supabase) return { ok: false, error: 'Supabase no inicializado' }
+  console.log('[googleLogin] 🔑 Starting Google OAuth flow...')
+  
+  if (!supabase) {
+    console.error('[googleLogin] ❌ Supabase not initialized')
+    return { ok: false, error: 'Supabase no inicializado' }
+  }
 
   try {
+    console.log('[googleLogin] 📡 Calling signInWithOAuth...')
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -633,16 +688,23 @@ ipcMain.handle('google-login', async () => {
       },
     })
 
-    if (error) return { ok: false, error: error.message }
+    if (error) {
+      console.error('[googleLogin] ❌ OAuth error:', error.message)
+      return { ok: false, error: error.message }
+    }
 
     // Open the OAuth URL in the system browser
     if (data?.url) {
+      console.log('[googleLogin] 🌐 Opening OAuth URL in browser:', data.url.substring(0, 50) + '...')
       shell.openExternal(data.url)
+      console.log('[googleLogin] ✅ Browser opened, waiting for callback...')
       return { ok: true, pending: true }
     }
 
+    console.error('[googleLogin] ❌ No OAuth URL generated')
     return { ok: false, error: 'No se generó URL de OAuth' }
   } catch (err) {
+    console.error('[googleLogin] ❌ Exception:', err.message, err.stack)
     return { ok: false, error: err.message }
   }
 })
