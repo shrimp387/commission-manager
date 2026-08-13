@@ -1,12 +1,14 @@
 /**
  * inkbunny.js — Publisher module for Inkbunny
  *
- * Uses Node.js built-in fetch (Node 18+) — no node-fetch dependency needed.
+ * Uses axios for proper FormData handling (fetch doesn't work correctly with form-data package)
  */
 
 'use strict'
 
+const axios = require('axios')
 const FormData = require('form-data')
+const sharp = require('sharp')
 
 const IB_BASE = 'https://inkbunny.net'
 const DOWNLOAD_TIMEOUT_MS = 30_000
@@ -14,29 +16,45 @@ const DOWNLOAD_TIMEOUT_MS = 30_000
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function downloadImage(url) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS)
-
-  let res
   try {
-    res = await fetch(url, { signal: controller.signal })
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: DOWNLOAD_TIMEOUT_MS,
+    })
+    
+    const buffer = Buffer.from(response.data)
+    const contentType = response.headers['content-type'] || 'image/png'
+    return { buffer, contentType }
   } catch (err) {
-    clearTimeout(timer)
-    if (err.name === 'AbortError') throw new Error('Timeout al descargar la imagen para Inkbunny')
-    throw err
+    if (err.code === 'ECONNABORTED') {
+      throw new Error('Timeout al descargar la imagen para Inkbunny')
+    }
+    throw new Error(`Error al descargar imagen: ${err.message}`)
   }
-  clearTimeout(timer)
-
-  if (!res.ok) throw new Error(`Error al descargar imagen: HTTP ${res.status}`)
-
-  const buffer = Buffer.from(await res.arrayBuffer())
-  const contentType = res.headers.get('content-type') || 'image/png'
-  return { buffer, contentType }
 }
 
 /**
- * Extracts error_message from an Inkbunny API response.
+ * Generates a thumbnail from an image buffer.
+ * @param {Buffer} buffer - Original image buffer
+ * @returns {Promise<Buffer>} - Thumbnail buffer (JPEG, max 800x800)
  */
+async function generateThumbnail(buffer) {
+  try {
+    const thumbnail = await sharp(buffer)
+      .resize(800, 800, {
+        fit: 'inside',        // Mantener aspect ratio
+        withoutEnlargement: true, // No agrandar imágenes pequeñas
+      })
+      .jpeg({ quality: 85 })  // Convertir a JPEG con buena calidad
+      .toBuffer()
+    
+    console.log('[inkbunny] ✅ Thumbnail generated:', thumbnail.length, 'bytes')
+    return thumbnail
+  } catch (err) {
+    console.error('[inkbunny] ⚠ Failed to generate thumbnail:', err.message)
+    return null // Retornar null si falla, continuará sin thumbnail
+  }
+}
 async function extractError(res) {
   try {
     const json = await res.json()
@@ -63,42 +81,103 @@ async function publishInkbunny(job, credentials) {
   }
 
   // Step 1 — Login to get session ID
+  console.log('[inkbunny] 🔐 Logging in as:', username)
   const loginParams = new URLSearchParams({ username, password })
-  const loginRes = await fetch(`${IB_BASE}/api_login.php`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: loginParams.toString(),
-  })
+  
+  let loginRes
+  try {
+    loginRes = await axios.post(`${IB_BASE}/api_login.php`, loginParams.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    })
+  } catch (err) {
+    console.error('[inkbunny] ❌ Login request failed:', err.message)
+    throw new Error(`Login de Inkbunny fallido: ${err.message}`)
+  }
 
-  const loginData = await loginRes.json().catch(() => ({}))
+  const loginData = loginRes.data
+  console.log('[inkbunny] Login response:', JSON.stringify(loginData))
   const sid = loginData?.sid
 
   if (!sid) {
-    throw new Error(loginData?.error_message || 'Login de Inkbunny fallido')
+    const errorMsg = loginData?.error_message || loginData?.error_code || 'Login de Inkbunny fallido'
+    console.error('[inkbunny] ❌ Login failed:', errorMsg)
+    console.error('[inkbunny] Full response:', JSON.stringify(loginData))
+    throw new Error(errorMsg)
   }
+  
+  console.log('[inkbunny] ✅ Logged in, sid:', sid.substring(0, 8) + '...')
 
   // Step 2 — Download and upload file
+  console.log('[inkbunny] 📥 Downloading image:', job.image_url)
   const filename = job.image_url?.split('/').pop() || 'artwork.png'
   const { buffer, contentType } = await downloadImage(job.image_url)
+  console.log('[inkbunny] ✅ Downloaded:', buffer.length, 'bytes, type:', contentType)
 
+  // Generate thumbnail for better preview (fixes broken preview on large images)
+  console.log('[inkbunny] 🖼️  Generating thumbnail...')
+  const thumbnailBuffer = await generateThumbnail(buffer)
+
+  console.log('[inkbunny] 📤 Uploading file to Inkbunny...')
   const uploadForm = new FormData()
+  // CRITICAL: append sid FIRST before the file
   uploadForm.append('sid', sid)
-  uploadForm.append('uploadedfile[0]', buffer, { filename, contentType })
-
-  const uploadRes = await fetch(`${IB_BASE}/api_upload.php`, {
-    method: 'POST',
-    headers: uploadForm.getHeaders(),
-    body: uploadForm,
+  uploadForm.append('uploadedfile[0]', buffer, {
+    filename,
+    contentType, // This sets the Content-Type header for this specific field
   })
-
-  const uploadData = await uploadRes.json().catch(() => ({}))
-  const submissionId = uploadData?.submission_id
-
-  if (!uploadRes.ok || !submissionId) {
-    throw new Error(uploadData?.error_message || `Error al subir archivo a Inkbunny: HTTP ${uploadRes.status}`)
+  
+  // Upload custom thumbnail if generation succeeded
+  if (thumbnailBuffer) {
+    uploadForm.append('uploadedthumbnail[]', thumbnailBuffer, {
+      filename: 'thumb_' + filename.replace(/\.\w+$/, '.jpg'), // .jpg extension
+      contentType: 'image/jpeg',
+    })
+    console.log('[inkbunny] 📎 Custom thumbnail attached')
   }
 
+  // Log FormData content for debugging
+  console.log('[inkbunny] FormData fields:', {
+    sid: sid.substring(0, 8) + '...',
+    filename,
+    contentType,
+    bufferSize: buffer.length,
+    hasThumbnail: !!thumbnailBuffer
+  })
+
+  let uploadRes
+  try {
+    // axios handles FormData correctly - it will use the proper headers and stream
+    uploadRes = await axios.post(`${IB_BASE}/api_upload.php`, uploadForm, {
+      headers: uploadForm.getHeaders(), // This is the KEY - axios uses form-data headers properly
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    })
+  } catch (err) {
+    console.error('[inkbunny] ❌ Upload request failed:', err.message)
+    if (err.response) {
+      console.error('[inkbunny] Upload error response:', JSON.stringify(err.response.data))
+      const errorMsg = err.response.data?.error_message || err.response.data?.error_code || `HTTP ${err.response.status}`
+      throw new Error(errorMsg)
+    }
+    throw err
+  }
+
+  const uploadData = uploadRes.data
+  console.log('[inkbunny] Upload response:', JSON.stringify(uploadData))
+  
+  const submissionId = uploadData?.submission_id
+
+  if (!submissionId) {
+    const errorMsg = uploadData?.error_message || uploadData?.error_code || 'Error al subir archivo a Inkbunny'
+    console.error('[inkbunny] ❌ Upload failed:', errorMsg)
+    console.error('[inkbunny] Full upload response:', JSON.stringify(uploadData))
+    throw new Error(errorMsg)
+  }
+  
+  console.log('[inkbunny] ✅ Uploaded, submission_id:', submissionId)
+
   // Step 3 — Edit submission metadata + publish (visibility=yes)
+  console.log('[inkbunny] ✏️ Editing submission metadata...')
   // Map rating to Inkbunny's content rating system:
   //   guest_block=no → accessible publicly
   //   type: '1'      → Picture/Pinup
@@ -116,22 +195,24 @@ async function publishInkbunny(job, credentials) {
     desc: job.description ?? '',
     keywords: (job.tags ?? []).join(' '),
     type: '1',                     // 1 = Picture/Pinup
-    visibility: 'yes',             // ← publish immediately (not draft)
-    notify_followers: 'yes',       // ← notify watchers
-    guest_block: 'no',             // ← allow guest access
+    visibility: 'no',              // ← DRAFT MODE - not published yet, user can review and publish manually
+    notify_followers: 'no',        // ← don't notify since it's a draft
+    guest_block: 'no',             // ← allow guest access when published
     ...ratingFields,
   })
 
-  const editRes = await fetch(`${IB_BASE}/api_editsubmission.php`, {
-    method: 'POST',
+  const editRes = await axios.post(`${IB_BASE}/api_editsubmission.php`, editParams.toString(), {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: editParams.toString(),
   })
 
-  const editData = await editRes.json().catch(() => ({}))
+  const editData = editRes.data
+  console.log('[inkbunny] Edit response:', JSON.stringify(editData))
 
-  if (!editRes.ok) {
-    throw new Error(editData?.error_message || `Error al editar submission en Inkbunny: HTTP ${editRes.status}`)
+  if (editData?.error_message || editData?.error_code) {
+    const errorMsg = editData.error_message || editData.error_code || 'Error al editar submission en Inkbunny'
+    console.error('[inkbunny] ❌ Edit failed:', errorMsg)
+    console.error('[inkbunny] Full edit response:', JSON.stringify(editData))
+    throw new Error(errorMsg)
   }
 
   const submissionUrl = `${IB_BASE}/s/${submissionId}`
@@ -154,13 +235,11 @@ async function testInkbunny(credentials) {
 
   try {
     const params = new URLSearchParams({ username, password })
-    const res = await fetch(`${IB_BASE}/api_login.php`, {
-      method: 'POST',
+    const res = await axios.post(`${IB_BASE}/api_login.php`, params.toString(), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
     })
 
-    const data = await res.json().catch(() => ({}))
+    const data = res.data
 
     if (data?.sid) {
       return { ok: true, username: data.ratingsmask !== undefined ? username : username }

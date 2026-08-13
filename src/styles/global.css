@@ -2375,3 +2375,74 @@ a { color: var(--blue); }
 }
 .pub-btn-next:hover:not(:disabled) { opacity: 0.85; }
 .pub-btn-next:disabled { opacity: 0.4; cursor: not-allowed; }
+
+
+/* ====== THUMBNAIL CONTROLS (PublishPage) ====== */
+.pub-thumbnail-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.875rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--border);
+}
+
+.pub-thumbnail-preview {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 2px solid var(--green);
+  background: var(--surface2);
+}
+
+.pub-thumbnail-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pub-thumbnail-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.9);
+  border: none;
+  color: white;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t);
+}
+
+.pub-thumbnail-remove:hover {
+  background: var(--red);
+}
+
+.pub-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  background: var(--surface2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--t);
+}
+
+.pub-btn-secondary:hover {
+  background: var(--surface3);
+  color: var(--text);
+  border-color: var(--text-muted);
+}

@@ -1,11 +1,13 @@
 /**
  * tagGenerator.js — Generación automática de tags estilo e621.
  *
- * Método primario: web → Supabase tag_requests → companion app (local, sin bloqueos)
- * Método fallback: Cloudflare Worker → HuggingFace (puede fallar con 530)
- * Método alternativo: Mistral Pixtral (requiere plan de pago)
+ * Soporta múltiples backends:
+ * - e621: Poofy1/e621-tagger (específico para furry art)
+ * - pawfect: P.A.W.F.E.C.T-Alpha (entrenado con FurAffinity)
+ * - mistral: Mistral Pixtral (requiere plan de pago)
  */
 import { getConfig } from '../store/appConfig.js'
+import { generateTagsE621, generateTagsPAWFECT } from './e621Tagger.js'
 
 const MAX_TAGS = 200
 
@@ -172,9 +174,18 @@ async function generateTagsMistral(imageUrl) {
 
 export async function generateTags(imageUrl, backend, onStatus) {
   const cfg = getConfig()
-  const resolvedBackend = backend ?? cfg.tagBackend ?? 'wdtagger'
-  if (resolvedBackend === 'mistral') return generateTagsMistral(imageUrl)
-  return generateTagsWDTagger(imageUrl, onStatus)
+  const resolvedBackend = backend ?? cfg.tagBackend ?? 'e621'
+  
+  if (resolvedBackend === 'mistral') {
+    return generateTagsMistral(imageUrl)
+  }
+  
+  if (resolvedBackend === 'pawfect') {
+    return generateTagsPAWFECT(imageUrl, cfg.hfToken, onStatus)
+  }
+  
+  // Default: e621 (Poofy1)
+  return generateTagsE621(imageUrl, cfg.hfToken, onStatus)
 }
 
 export function parseTags(text) {

@@ -71,10 +71,27 @@ async function loadCookies(context) {
  */
 async function isLoggedIn(page) {
   try {
-    // Check if logout link exists (means user is logged in)
+    // Wait a bit for page to load
+    await page.waitForTimeout(1000)
+    
+    // Multiple ways to detect login:
+    // 1. Check for logout link
     const logoutLink = await page.$('a[href*="logout"]')
-    return !!logoutLink
-  } catch {
+    if (logoutLink) return true
+    
+    // 2. Check for username display in header
+    const usernameEl = await page.$('.widget_userheader, .username, a[href*="/user"]')
+    if (usernameEl) return true
+    
+    // 3. Check if we're NOT on login page
+    const url = page.url()
+    if (!url.includes('login.php') && url.includes('inkbunny.net')) {
+      return true
+    }
+    
+    return false
+  } catch (err) {
+    console.warn('[inkbunnyBrowser] isLoggedIn check error:', err.message)
     return false
   }
 }
@@ -84,20 +101,30 @@ async function isLoggedIn(page) {
  */
 async function login(page, username, password) {
   console.log('[inkbunnyBrowser] Navigating to login page...')
-  await page.goto('https://inkbunny.net/login.php', { waitUntil: 'networkidle' })
+  await page.goto('https://inkbunny.net/login.php', { waitUntil: 'domcontentloaded', timeout: 30000 })
+  
+  // Wait for form to be ready
+  await page.waitForSelector('input[name="username"]', { timeout: 10000 })
   
   // Fill login form
+  console.log('[inkbunnyBrowser] Filling login form...')
   await page.fill('input[name="username"]', username)
   await page.fill('input[name="password"]', password)
   
   // Click login button
+  console.log('[inkbunnyBrowser] Clicking login button...')
   await page.click('button[type="submit"], input[type="submit"]')
   
   // Wait for navigation after login
-  await page.waitForLoadState('networkidle')
+  console.log('[inkbunnyBrowser] Waiting for login to complete...')
+  await page.waitForLoadState('domcontentloaded')
+  await page.waitForTimeout(2000)  // Give it time to redirect
   
   // Verify login succeeded
-  if (!(await isLoggedIn(page))) {
+  const loggedIn = await isLoggedIn(page)
+  console.log('[inkbunnyBrowser] Login check result:', loggedIn)
+  
+  if (!loggedIn) {
     throw new Error('Login failed - please check credentials')
   }
   
@@ -144,11 +171,16 @@ async function publishInkbunnyBrowser(job, credentials) {
     
     const page = await context.newPage()
     
-    // Check if already logged in
-    await page.goto('https://inkbunny.net/', { waitUntil: 'networkidle' })
+    // Check if already logged in by going to homepage
+    console.log('[inkbunnyBrowser] Checking if already logged in...')
+    await page.goto('https://inkbunny.net/', { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await page.waitForTimeout(2000)  // Wait for page to fully render
     
-    if (!(await isLoggedIn(page))) {
-      console.log('[inkbunnyBrowser] Not logged in, logging in...')
+    const loggedIn = await isLoggedIn(page)
+    console.log('[inkbunnyBrowser] Already logged in:', loggedIn)
+    
+    if (!loggedIn) {
+      console.log('[inkbunnyBrowser] Not logged in, performing login...')
       await login(page, username, password)
       await saveCookies(context)
     } else {
@@ -157,54 +189,171 @@ async function publishInkbunnyBrowser(job, credentials) {
     
     // Navigate to upload page
     console.log('[inkbunnyBrowser] Navigating to upload page...')
-    await page.goto('https://inkbunny.net/submissionsupload.php', { waitUntil: 'networkidle' })
+    await page.goto('https://inkbunny.net/submissionsupload.php', { waitUntil: 'networkidle', timeout: 30000 })
+    await page.waitForTimeout(3000)  // Extra wait for page to fully render
+    
+    console.log('[inkbunnyBrowser] Current URL after navigation:', page.url())
+    console.log('[inkbunnyBrowser] Page title:', await page.title())
+    
+    // Take screenshot for debugging
+    const debugScreenshot = path.join(os.tmpdir(), `inkbunny-debug-${Date.now()}.png`)
+    await page.screenshot({ path: debugScreenshot, fullPage: true })
+    console.log('[inkbunnyBrowser] Debug screenshot saved:', debugScreenshot)
     
     // Download image to temporary file
-    console.log('[inkbunnyBrowser] Downloading image...')
+    console.log('[inkbunnyBrowser] Downloading image from:', job.image_url)
     tempImageFile = await downloadImageToFile(job.image_url)
+    console.log('[inkbunnyBrowser] Image downloaded to:', tempImageFile)
     
-    // Upload image file
-    console.log('[inkbunnyBrowser] Uploading image...')
-    const fileInput = await page.$('input[type="file"][name="uploadedfile[]"]')
-    if (fileInput) {
-      await fileInput.setInputFiles(tempImageFile)
-      
-      // Wait for upload to complete
-      await page.waitForTimeout(2000)
-      
-      // Click "Continue" or "Upload" button
-      const uploadButton = await page.$('button:has-text("Upload"), input[value*="Upload"], button:has-text("Continue")')
-      if (uploadButton) {
-        await uploadButton.click()
-        await page.waitForLoadState('networkidle')
+    // Upload image file - try multiple selectors
+    console.log('[inkbunnyBrowser] Looking for file input...')
+    
+    // Wait for ANY of these selectors
+    const fileInputSelectors = [
+      'input[type="file"][name="uploadedfile[]"]',
+      'input[type="file"][name="uploadedfile"]',
+      'input[type="file"]',
+      '#uploadedfile',
+      'input[name="uploadedfile[]"]',
+    ]
+    
+    let fileInput = null
+    for (const selector of fileInputSelectors) {
+      console.log('[inkbunnyBrowser] Trying selector:', selector)
+      try {
+        await page.waitForSelector(selector, { timeout: 3000, state: 'attached' })
+        fileInput = await page.$(selector)
+        if (fileInput) {
+          console.log('[inkbunnyBrowser] ✅ Found file input with selector:', selector)
+          break
+        }
+      } catch (err) {
+        console.log('[inkbunnyBrowser] Selector not found:', selector)
       }
+    }
+    
+    if (!fileInput) {
+      // Try to find ANY file input on the page
+      console.log('[inkbunnyBrowser] Trying to find ANY file input...')
+      fileInput = await page.$('input[type="file"]')
+      
+      if (!fileInput) {
+        throw new Error('File upload input not found on page. Check screenshot: ' + debugScreenshot)
+      }
+    }
+    
+    console.log('[inkbunnyBrowser] Setting file input...')
+    await fileInput.setInputFiles(tempImageFile)
+    console.log('[inkbunnyBrowser] File set, waiting for upload...')
+    
+    // Wait for upload to complete
+    await page.waitForTimeout(3000)
+    
+    // Click "Continue" or "Upload" button - try multiple selectors
+    console.log('[inkbunnyBrowser] Looking for upload/continue button...')
+    const buttonSelectors = [
+      'button[type="submit"]',
+      'input[type="submit"]',
+      'button:has-text("Upload")',
+      'input[value*="Upload"]',
+      'button:has-text("Continue")',
+      'input[value*="Continue"]',
+      '.submit-button',
+    ]
+    
+    let uploadButton = null
+    for (const selector of buttonSelectors) {
+      uploadButton = await page.$(selector)
+      if (uploadButton) {
+        console.log('[inkbunnyBrowser] Found button with selector:', selector)
+        break
+      }
+    }
+    
+    if (uploadButton) {
+      console.log('[inkbunnyBrowser] Clicking upload button...')
+      await uploadButton.click()
+      await page.waitForLoadState('networkidle', { timeout: 30000 })
+      await page.waitForTimeout(3000)
+      console.log('[inkbunnyBrowser] Upload button clicked, page loaded')
+      console.log('[inkbunnyBrowser] New URL:', page.url())
+    } else {
+      console.warn('[inkbunnyBrowser] Upload button not found, assuming auto-upload or ajax')
     }
     
     // Now we should be on the submission details page
     // Fill out the form
     console.log('[inkbunnyBrowser] Filling submission form...')
+    console.log('[inkbunnyBrowser] Current URL:', page.url())
     
-    // Title
-    const titleInput = await page.$('input[name="title"]')
-    if (titleInput) {
-      await titleInput.fill(job.title || 'Untitled')
+    // Take another screenshot
+    const formScreenshot = path.join(os.tmpdir(), `inkbunny-form-${Date.now()}.png`)
+    await page.screenshot({ path: formScreenshot, fullPage: true })
+    console.log('[inkbunnyBrowser] Form screenshot saved:', formScreenshot)
+    
+    // Wait for form to be ready
+    await page.waitForTimeout(2000)
+    
+    // Title - try multiple selectors
+    console.log('[inkbunnyBrowser] Setting title:', job.title)
+    const titleSelectors = ['input[name="title"]', '#title', 'input[id*="title"]']
+    let titleInput = null
+    for (const selector of titleSelectors) {
+      titleInput = await page.$(selector)
+      if (titleInput) {
+        await titleInput.fill(job.title || 'Untitled')
+        console.log('[inkbunnyBrowser] Title set using selector:', selector)
+        break
+      }
+    }
+    if (!titleInput) {
+      console.warn('[inkbunnyBrowser] ⚠️ Title input not found with any selector')
     }
     
-    // Description
-    const descInput = await page.$('textarea[name="desc"]')
-    if (descInput) {
-      await descInput.fill(job.description || '')
+    // Description - try multiple selectors
+    console.log('[inkbunnyBrowser] Setting description...')
+    const descSelectors = ['textarea[name="desc"]', '#desc', 'textarea[id*="desc"]', 'textarea[name="description"]']
+    let descInput = null
+    for (const selector of descSelectors) {
+      descInput = await page.$(selector)
+      if (descInput) {
+        await descInput.fill(job.description || '')
+        console.log('[inkbunnyBrowser] Description set using selector:', selector)
+        break
+      }
+    }
+    if (!descInput) {
+      console.warn('[inkbunnyBrowser] ⚠️ Description textarea not found with any selector')
     }
     
-    // Keywords/Tags
-    const keywordsInput = await page.$('input[name="keywords"], textarea[name="keywords"]')
+    // Keywords/Tags - try multiple selectors
+    console.log('[inkbunnyBrowser] Setting keywords/tags:', job.tags)
+    const keywordSelectors = [
+      'input[name="keywords"]', 
+      'textarea[name="keywords"]',
+      '#keywords',
+      'input[id*="keyword"]',
+      'textarea[id*="keyword"]'
+    ]
+    let keywordsInput = null
+    for (const selector of keywordSelectors) {
+      keywordsInput = await page.$(selector)
+      if (keywordsInput) break
+    }
+    
     if (keywordsInput && job.tags && job.tags.length > 0) {
       await keywordsInput.fill(job.tags.join(' '))
+      console.log('[inkbunnyBrowser] Keywords set:', job.tags.length, 'tags using selector')
+    } else if (!keywordsInput) {
+      console.warn('[inkbunnyBrowser] ⚠️ Keywords input not found with any selector')
+    } else {
+      console.warn('[inkbunnyBrowser] ⚠️ No tags provided to set')
     }
     
     // Rating - Inkbunny uses checkboxes for content ratings
-    // tag_list_two = Mature/Adult content
-    // tag_list_three = Explicit sexual content
+    // tag_list[2] = Mature/Adult content (nudity)
+    // tag_list[3] = Explicit sexual content
+    console.log('[inkbunnyBrowser] Setting rating:', job.rating)
     const ratingMap = {
       safe:         { nudity: false, sexual: false },
       questionable: { nudity: true,  sexual: false },
@@ -217,9 +366,13 @@ async function publishInkbunnyBrowser(job, credentials) {
     if (nudityCheckbox) {
       if (rating.nudity) {
         await nudityCheckbox.check()
+        console.log('[inkbunnyBrowser] Nudity checkbox checked')
       } else {
         await nudityCheckbox.uncheck()
+        console.log('[inkbunnyBrowser] Nudity checkbox unchecked')
       }
+    } else {
+      console.warn('[inkbunnyBrowser] Nudity checkbox not found')
     }
     
     // Check/uncheck sexual content checkbox
@@ -227,12 +380,17 @@ async function publishInkbunnyBrowser(job, credentials) {
     if (sexualCheckbox) {
       if (rating.sexual) {
         await sexualCheckbox.check()
+        console.log('[inkbunnyBrowser] Sexual content checkbox checked')
       } else {
         await sexualCheckbox.uncheck()
+        console.log('[inkbunnyBrowser] Sexual content checkbox unchecked')
       }
+    } else {
+      console.warn('[inkbunnyBrowser] Sexual content checkbox not found')
     }
     
     // Set visibility to public (not draft)
+    console.log('[inkbunnyBrowser] Setting visibility to public...')
     const visibilitySelect = await page.$('select[name="visibility"]')
     if (visibilitySelect) {
       await visibilitySelect.selectOption('yes')

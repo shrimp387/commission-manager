@@ -1,0 +1,19 @@
+# ICONO DE LA APP
+
+Por favor agrega un archivo `icon.png` en esta carpeta `companion-app/assets/`
+
+Requisitos:
+- Formato: PNG
+- Tamaño recomendado: 256x256px o 512x512px
+- Transparencia: Sí (alpha channel)
+
+El icono se mostrará en:
+- Barra de tareas de Windows
+- Esquina superior izquierda de la ventana
+- ALT+TAB
+- Lista de programas
+
+Puedes usar un logo simple con:
+- Colores del tema (#7c6af5 purple, #1a1a2e dark)
+- Algo relacionado con "furry art" o "publishing"
+- Iniciales "CM" (Commission Manager)

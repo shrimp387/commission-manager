@@ -18,6 +18,7 @@ import { identifyHighResAttachment, generateTags, normalizeTag, ConfigError } fr
 import { insertPublishJob } from '../lib/publishJobsDb.js'
 import { getCurrentUserId } from '../lib/db.js'
 import { getConfig, setConfig } from '../store/appConfig.js'
+import ImageCropModal from '../components/ImageCropModal.jsx'
 
 // ── Step bar (same pattern as CommissionForm) ────────────────────────────────
 
@@ -122,6 +123,11 @@ export default function PublishPage() {
   const [rating, setRating]           = useState('safe')
   const [tags, setTags]               = useState([])
   const [selectedPlatforms, setSelectedPlatforms] = useState([])
+  
+  // ── Thumbnail/crop state ────────────────────────────────────────────────────
+  const [showCropModal, setShowCropModal] = useState(false)
+  const [thumbnailBlob, setThumbnailBlob] = useState(null)
+  const [thumbnailPreview, setThumbnailPreview] = useState(null)
 
   // ── Loading / error state ───────────────────────────────────────────────────
   const [loadingTags,    setLoadingTags]    = useState(false)
@@ -132,11 +138,24 @@ export default function PublishPage() {
   const [sendSuccess,  setSendSuccess]  = useState(false)
 
   // ── Tag backend state ───────────────────────────────────────────────────────
-  const [tagBackend, setTagBackendState] = useState(() => getConfig().tagBackend ?? 'wdtagger')
+  const [tagBackend, setTagBackendState] = useState(() => getConfig().tagBackend ?? 'e621')
 
   function handleBackendChange(val) {
     setTagBackendState(val)
     setConfig('tagBackend', val)
+  }
+  
+  // ── Thumbnail/crop handlers ─────────────────────────────────────────────────
+  function handleCropSave(blob) {
+    setThumbnailBlob(blob)
+    setThumbnailPreview(URL.createObjectURL(blob))
+    setShowCropModal(false)
+  }
+  
+  function handleRemoveThumbnail() {
+    if (thumbnailPreview) URL.revokeObjectURL(thumbnailPreview)
+    setThumbnailBlob(null)
+    setThumbnailPreview(null)
   }
 
   // ── Auto-generate tags when entering step 2 ─────────────────────────────────
@@ -240,11 +259,34 @@ export default function PublishPage() {
           <div className="pub-step-content">
             <div className="pub-preview-section">
               {highRes ? (
-                <img
-                  src={highRes.url}
-                  alt="Vista previa"
-                  className="pub-preview-img"
-                />
+                <>
+                  <img
+                    src={highRes.url}
+                    alt="Vista previa"
+                    className="pub-preview-img"
+                  />
+                  <div className="pub-thumbnail-controls">
+                    <button
+                      className="pub-btn-secondary"
+                      onClick={() => setShowCropModal(true)}
+                      style={{ fontSize: '0.85rem', padding: '8px 16px' }}
+                    >
+                      ✂️ Crear Thumbnail
+                    </button>
+                    {thumbnailPreview && (
+                      <div className="pub-thumbnail-preview">
+                        <img src={thumbnailPreview} alt="Thumbnail preview" />
+                        <button
+                          className="pub-thumbnail-remove"
+                          onClick={handleRemoveThumbnail}
+                          title="Eliminar thumbnail"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </>
               ) : (
                 <div className="pub-preview-placeholder">
                   <span style={{ fontSize: '3rem' }}>🖼</span>
@@ -325,7 +367,8 @@ export default function PublishPage() {
                   onChange={e => handleBackendChange(e.target.value)}
                   title="Motor de generación de tags"
                 >
-                  <option value="wdtagger">🐾 WD-Tagger (gratis, NSFW)</option>
+                  <option value="e621">🐾 E621-Tagger (furry art, gratis)</option>
+                  <option value="pawfect">🦊 P.A.W.F.E.C.T (FurAffinity, gratis)</option>
                   <option value="mistral">🧠 Mistral Pixtral</option>
                 </select>
                 <button
@@ -485,6 +528,15 @@ export default function PublishPage() {
         )}
 
       </div>
+      
+      {/* ── Crop Modal ── */}
+      {showCropModal && highRes && (
+        <ImageCropModal
+          imageUrl={highRes.url}
+          onSave={handleCropSave}
+          onCancel={() => setShowCropModal(false)}
+        />
+      )}
     </div>
   )
 }

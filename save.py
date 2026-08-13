@@ -242,4 +242,11 @@ def main():
 """)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n  [!] Cancelado por el usuario.\n")
+    except Exception as e:
+        print(f"\n\n  [X] Error: {e}\n")
+    finally:
+        input("\n  Presiona ENTER para cerrar...")  # Evita que se cierre automaticamente

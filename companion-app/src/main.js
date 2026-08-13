@@ -27,7 +27,7 @@ const store = new Store({
     pollInterval: 5000,
     platforms: {
       e621:        { username: '', apiKey: '',      enabled: false },
-      inkbunny:    { username: '', password: '',    enabled: false, useBrowser: true },
+      inkbunny:    { username: '', password: '',    enabled: false, useBrowser: false },
       weasyl:      { apiKey: '',                   enabled: false },
       bluesky:     { handle: '', appPassword: '',  enabled: false },
       telegram:    { botToken: '', chatId: '',      enabled: false },
@@ -112,8 +112,10 @@ function openSettings() {
   }
 
   settingsWindow = new BrowserWindow({
-    width: 700,
-    height: 600,
+    width: 420,               // ← Más pequeña (antes 700)
+    height: 650,              // ← Más alta (antes 600)
+    x: 20,                    // ← Pegadita al lado izquierdo
+    y: 100,                   // ← Un poco abajo del top
     title: 'Companion App — Configuración',
     webPreferences: {
       nodeIntegration: false,
@@ -121,6 +123,10 @@ function openSettings() {
       preload: path.join(__dirname, 'preload.js'),
     },
     autoHideMenuBar: true,
+    resizable: true,          // ← Permitir resize
+    minimizable: true,
+    maximizable: true,        // ← Permitir maximizar
+    icon: path.join(__dirname, '..', 'assets', 'icon.png'), // ← Icono de la app
   })
 
   settingsWindow.loadFile(path.join(__dirname, '..', 'ui', 'settings.html'))
@@ -202,13 +208,13 @@ function startPolling() {
 
     try {
       const userId = store.get('supabaseUserId')
-      console.log(`[poll] 🔍 Polling for userId: ${userId}`)
+      // console.log(`[poll] 🔍 Polling for userId: ${userId}`) // SILENCED
 
       // Process tag requests first (fast, no publishing)
       await processTagRequests()
 
       // Fetch pending publish jobs
-      console.log('[poll] 📬 Querying publish_jobs...')
+      // console.log('[poll] 📬 Querying publish_jobs...') // SILENCED
       const { data: jobs, error } = await supabase
         .from('publish_jobs')
         .select('*')
@@ -222,14 +228,17 @@ function startPolling() {
         throw error
       }
       
-      console.log(`[poll] 📊 Found ${jobs?.length ?? 0} pending jobs`)
+      // Only log if we found jobs
+      if (jobs && jobs.length > 0) {
+        console.log(`[poll] 📊 Found ${jobs.length} pending jobs`)
+        console.log('[poll] 🎯 Jobs to process:', jobs.map(j => ({ id: j.id, platforms: j.platforms, title: j.title })))
+      }
+      // else: Stay silent when no jobs (don't spam console)
       
       if (!jobs || jobs.length === 0) {
-        console.log('[poll] ✅ No pending jobs — waiting...')
+        // console.log('[poll] ✅ No pending jobs — waiting...') // SILENCED
         return
       }
-
-      console.log('[poll] 🎯 Jobs to process:', jobs.map(j => ({ id: j.id, platforms: j.platforms, title: j.title })))
       
       updateTrayMenu('running')
 
@@ -258,12 +267,12 @@ async function processTagRequests() {
   }
   try {
     const userId = store.get('supabaseUserId')
-    console.log(`[tagReq] polling for userId: ${userId}`)
+    // console.log(`[tagReq] polling for userId: ${userId}`) // SILENCED
 
     // Check if we have an authenticated session
     const { data: sessionData } = await supabase.auth.getSession()
     const hasSession = !!sessionData?.session?.access_token
-    console.log(`[tagReq] has auth session: ${hasSession}`)
+    // console.log(`[tagReq] has auth session: ${hasSession}`) // SILENCED
 
     const { data: requests, error } = await supabase
       .from('tag_requests')
@@ -278,7 +287,12 @@ async function processTagRequests() {
       return
     }
 
-    console.log(`[tagReq] found ${requests?.length ?? 0} pending requests`)
+    // Only log if we found requests
+    if (requests && requests.length > 0) {
+      console.log(`[tagReq] found ${requests.length} pending requests`)
+    }
+    // else: Stay silent when no requests
+    
     if (!requests || requests.length === 0) return
 
     for (const req of requests) {
