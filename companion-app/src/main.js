@@ -171,7 +171,10 @@ function startPolling() {
     try {
       const userId = store.get('supabaseUserId')
 
-      // Fetch pending jobs for this user
+      // Process tag requests first (fast, no publishing)
+      await processTagRequests()
+
+      // Fetch pending publish jobs
       const { data: jobs, error } = await supabase
         .from('publish_jobs')
         .select('*')
@@ -200,6 +203,41 @@ function startPolling() {
 }
 
 const { generateTagsWDTagger } = require('./wdTagger')
+
+// ── Tag requests polling ──────────────────────────────────────────────────────
+// The web app inserts tag_requests into Supabase.
+// The companion processes them locally (no CF IP blocks, no Mixed Content).
+async function processTagRequests() {
+  if (!supabase || !store.get('supabaseUserId')) return
+  try {
+    const userId = store.get('supabaseUserId')
+    const { data: requests } = await supabase
+      .from('tag_requests')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true })
+      .limit(3)
+
+    if (!requests || requests.length === 0) return
+
+    for (const req of requests) {
+      // Mark as processing
+      await supabase.from('tag_requests').update({ status: 'processing', updated_at: new Date().toISOString() }).eq('id', req.id)
+      try {
+        const hfToken = store.get('hfToken') || ''
+        const tags = await generateTagsWDTagger(req.image_url, hfToken)
+        await supabase.from('tag_requests').update({ status: 'done', tags, updated_at: new Date().toISOString() }).eq('id', req.id)
+        console.log(`[tagReq] Done ${req.id}: ${tags.length} tags`)
+      } catch (err) {
+        await supabase.from('tag_requests').update({ status: 'error', error_msg: err.message, updated_at: new Date().toISOString() }).eq('id', req.id)
+        console.error(`[tagReq] Error ${req.id}:`, err.message)
+      }
+    }
+  } catch (err) {
+    console.error('[tagReq] poll error:', err.message)
+  }
+}
 
 // ── Process a single publish job ──────────────────────────────────────────────
 async function processJob(job) {
@@ -453,7 +491,10 @@ function startOAuthCallback() {
 }
 
 // ── IPC handlers (for settings UI) ───────────────────────────────────────────
-ipcMain.handle('get-config', () => store.store)
+ipcMain.handle('get-config', () => {
+  const pkg = require('../package.json')
+  return { ...store.store, appVersion: pkg.version }
+})
 
 ipcMain.handle('save-config', (event, config) => {
   store.set(config)

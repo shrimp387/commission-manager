@@ -414,44 +414,58 @@ export default {
         contentType = imgRes.headers.get('content-type') || 'image/png'
       }
 
-      // Call HuggingFace WD-Tagger
-      // HF_TOKEN is required — set via: wrangler secret put HF_TOKEN
-      const hfHeaders = { 'Content-Type': contentType }
-      if (env.HF_TOKEN) {
-        hfHeaders['Authorization'] = `Bearer ${env.HF_TOKEN}`
-      } else {
-        // No token configured — reject with clear message
+      // Call HuggingFace Inference API with token
+      // NOTE: If companion app is running locally, requests never reach here.
+      // This is the fallback when companion is not available.
+      if (!env.HF_TOKEN) {
         return new Response(JSON.stringify({
-          error: 'HF_TOKEN not configured in worker. Run: wrangler secret put HF_TOKEN'
-        }), {
-          status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
-        })
+          error: 'Companion app no está corriendo en tu PC. Abre Commission Manager Companion y vuelve a intentar. (HF_TOKEN también falta como fallback)'
+        }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } })
       }
 
-      const hfRes = await fetch(
-        'https://api-inference.huggingface.co/models/SmilingWolf/wd-v1-4-swinv2-tagger-v2',
-        { method: 'POST', headers: hfHeaders, body: imgBuffer }
-      )
+      const hfModels = [
+        'SmilingWolf/wd-vit-tagger-v3',
+        'SmilingWolf/wd-v1-4-swinv2-tagger-v2',
+        'SmilingWolf/wd-v1-4-vit-tagger-v2',
+      ]
 
-      if (!hfRes.ok) {
-        const hfBody = await hfRes.json().catch(() => ({}))
-        if (hfRes.status === 503) {
-          return new Response(JSON.stringify({
-            error: 'model_loading',
-            estimated_time: hfBody.estimated_time ?? 20,
-            message: `WD-Tagger cargando, intenta en ${Math.ceil(hfBody.estimated_time ?? 20)}s`
-          }), {
-            status: 503, headers: { ...cors, 'Content-Type': 'application/json' }
-          })
-        }
-        return new Response(JSON.stringify({ error: hfBody.error || `HF API HTTP ${hfRes.status}` }), {
-          status: 502, headers: { ...cors, 'Content-Type': 'application/json' }
-        })
+      let hfOkRes = null
+      const modelErrors = []
+
+      for (const model of hfModels) {
+        const r = await fetch(
+          `https://api-inference.huggingface.co/models/${model}`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${env.HF_TOKEN}`,
+              'Content-Type': contentType,
+              'x-use-cache': 'false',
+            },
+            body: imgBuffer,
+          }
+        )
+        if (r.ok) { hfOkRes = r; break }
+        const errBody = await r.json().catch(() => ({}))
+        modelErrors.push(`${model}→${r.status}:${errBody.error || ''}`)
       }
 
-      const predictions = await hfRes.json()
+      if (!hfOkRes) {
+        return new Response(JSON.stringify({
+          error: `Para usar WD-Tagger abre la Companion App en tu PC. (Fallback HF falló: ${modelErrors.join(' | ')})`
+        }), { status: 502, headers: { ...cors, 'Content-Type': 'application/json' } })
+      }
+
+      const predictions = await hfOkRes.json()
+
+      if (!Array.isArray(predictions)) {
+        return new Response(JSON.stringify({
+          error: `Unexpected HF response: ${JSON.stringify(predictions).slice(0, 200)}`
+        }), { status: 502, headers: { ...cors, 'Content-Type': 'application/json' } })
+      }
+
       const tags = predictions
-        .filter(p => p.score >= threshold)
+        .filter(p => (p.score ?? 0) >= threshold)
         .sort((a, b) => b.score - a.score)
         .map(p => p.label.toLowerCase().replace(/\s+/g, '_'))
         .filter(t => t.length > 0)

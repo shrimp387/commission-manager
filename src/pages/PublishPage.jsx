@@ -124,8 +124,9 @@ export default function PublishPage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState([])
 
   // ── Loading / error state ───────────────────────────────────────────────────
-  const [loadingTags,  setLoadingTags]  = useState(false)
-  const [tagsError,    setTagsError]    = useState(null)
+  const [loadingTags,    setLoadingTags]    = useState(false)
+  const [loadingStatus,  setLoadingStatus]  = useState(null)
+  const [tagsError,      setTagsError]      = useState(null)
   const [sending,      setSending]      = useState(false)
   const [sendError,    setSendError]    = useState(null)
   const [sendSuccess,  setSendSuccess]  = useState(false)
@@ -148,14 +149,20 @@ export default function PublishPage() {
     setLoadingTags(true)
     setTagsError(null)
     try {
-      const generated = await generateTags(highRes.url, tagBackend)
+      const generated = await generateTags(highRes.url, tagBackend, (msg) => {
+        // Show status messages from the tag generation process
+        setTagsError(null)
+        // Use a temporary status display via tagsError with info styling
+        setLoadingStatus(msg)
+      })
       setTags(generated)
+      setLoadingStatus(null)
     } catch (err) {
       console.error('[PublishPage] generateTagsAuto error:', err)
+      setLoadingStatus(null)
       if (err instanceof ConfigError) {
         setTagsError(err.message)
       } else {
-        // Show the real error message so we can debug
         setTagsError(`Error: ${err.message}`)
       }
     } finally {
@@ -331,7 +338,7 @@ export default function PublishPage() {
             {loadingTags && (
               <div className="pub-loading">
                 <div className="mini-spinner" />
-                <span>Analizando imagen...</span>
+                <span>{loadingStatus || 'Analizando imagen...'}</span>
               </div>
             )}
 

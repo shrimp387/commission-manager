@@ -93,6 +93,12 @@ async function prefillForm() {
   try {
     const cfg = await window.companion.getConfig()
 
+    // Show version
+    const versionEl = document.getElementById('app-version')
+    if (versionEl && cfg.appVersion) {
+      versionEl.textContent = `v${cfg.appVersion}`
+    }
+
     // e621
     const e621 = cfg.platforms?.e621 ?? {}
     setV('e621-user', e621.username)

@@ -1,10 +1,11 @@
 # Commission Manager — Contexto para nueva sesión
 
 ## Stack
-- **App web**: React + Vite, desplegada en Vercel
+- **App web**: React + Vite, desplegada en Vercel (HTTPS)
 - **Backend**: Supabase (auth, DB, RLS)
 - **Almacenamiento**: Cloudflare R2 (imágenes)
-- **Companion App**: Electron + Node.js v24, en `companion-app/`
+- **Worker**: Cloudflare Worker en `r2-worker/` — proxy de R2 + endpoints API
+- **Companion App**: Electron + Node.js v24, en `companion-app/` — `.exe` local en PC del artista
 - **Repo**: https://github.com/shrimp387/commission-manager
 
 ## Credenciales hardcodeadas (NO tocar)
@@ -17,42 +18,59 @@
 - User ID Supabase: `9347035e-7364-4852-a8bd-5f3c3792fd50`
 
 ## Deploy
-- `git add . && git commit -m "msg" && git push origin main` → Vercel auto-deploya
+- `git add . ; git commit -m "msg" ; git push origin main` → Vercel auto-deploya
+- Worker: `cd r2-worker ; npx wrangler deploy`
+- Companion: `cd companion-app ; npm run build` → genera `.exe` en `dist/win-unpacked/`
 - NO usar `&&` en PowerShell, usar `;` o comandos separados
 
 ---
 
-## Bugs pendientes a resolver en NUEVA SESIÓN
+## Estado actual de funcionalidades
 
-### Bug 1 — Mistral: modelo `pixtral-large-latest` inválido con API key general
-**Error**: `Invalid model: pixtral-large-latest`
-**Causa**: Las API keys "generales" de Mistral no tienen acceso a Pixtral. Pixtral requiere plan de pago o API key específica.
-**Fix**: 
-- En `src/pages/ConnectionsPage.jsx` → tarjeta Mistral AI → agregar un **selector de modelo** (dropdown)
-- Modelos disponibles para listar:
-  - `mistral-small-latest` (barato, sin visión)
-  - `mistral-medium-latest` (sin visión)  
-  - `open-mistral-7b` (gratis, sin visión)
-  - `pixtral-12b-2409` (visión, requiere plan)
-  - `pixtral-large-latest` (visión NSFW, requiere plan)
-  - Opción "otro" → campo manual
-- Guardar modelo elegido en `appConfig` como `mistralModel`
-- En `src/lib/tagGenerator.js` → leer `mistralModel` de config en vez de hardcodear `pixtral-large-latest`
-- Si el modelo NO tiene visión → mostrar advertencia "Este modelo no puede analizar imágenes"
+### ✅ Funcionando
+- Kanban board completo
+- Solicitudes de comisión (CommissionForm)
+- Subida de imágenes a R2
+- Companion app conectada a Inkbunny (publica via API, visibility=yes)
+- Selector de modelo Mistral en ConnectionsPage
+- Thumbnails 80x80 en PublicationsPage + botón eliminar
+- Botones publicación en morado (#7c6af5)
 
-### Bug 2 — Página Publicaciones: imagen a tamaño completo
-**Archivo**: `src/pages/PublicationsPage.jsx`
-**Problema**: Las imágenes en la lista de publicaciones se muestran a tamaño completo (ocupa toda la pantalla)
-**Fix**:
-- Thumbnail: `width: 80px, height: 80px, object-fit: cover, border-radius: 8px`
-- Botón "🗑 Eliminar" por registro → llama a `supabase.from('publications').delete().eq('id', record.id)`
-- Botón "Ver" lleva a la comisión en el tablero
-- Botones en color azul accent (`var(--accent)` o `#7c6af5`) en vez de blanco
+### ❌ Bug activo: WD-Tagger no funciona
+**Problema**: La web app está en HTTPS (Vercel). Intentar llamar a `http://localhost:54322` desde HTTPS causa **Mixed Content block** — el browser lo bloquea aunque el usuario acepte el popup.
 
-### Bug 3 — Botones feos (blancos)
-**Archivos**: `src/pages/PublishPage.jsx`, `src/pages/PublicationsPage.jsx`
-**Fix**: Cambiar `.pub-btn-next`, `.pub-submit-btn` a color azul/purple `#7c6af5` en vez del verde actual.
-El `--green` del proyecto es el acento verde del usuario. Los botones de publicación deberían ser morados/azules para diferenciarse.
+**Lo que se intentó:**
+1. HuggingFace Inference API directo desde browser → CORS bloqueado
+2. HuggingFace via Cloudflare Worker proxy → HTTP 530 (CF IPs baneadas por HF)
+3. Gradio Space de WD-Tagger → requiere login, no es público
+4. Companion app local en puerto 54322 → Mixed Content block (HTTPS→HTTP)
+
+**Solución pendiente (la correcta):**
+Usar Supabase como canal de comunicación entre la web y la companion:
+1. Web inserta un "tag_request" en una tabla Supabase con la imageUrl
+2. Companion (corriendo en PC) hace polling, recoge el request, llama a HF localmente (sin bloqueos), guarda los tags en Supabase
+3. Web hace polling/realtime para recibir los tags
+
+O alternativamente: integrar WD-Tagger directamente en la companion como parte del processJob — cuando procesa un publish_job sin tags, genera los tags automáticamente y los guarda en el job antes de publicar. La web puede leer los tags del job.
+
+**SQL pendiente ejecutar en Supabase:**
+```sql
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS mistral_model TEXT DEFAULT 'pixtral-large-latest';
+
+-- Para tag requests (si se implementa el approach via Supabase):
+CREATE TABLE IF NOT EXISTS tag_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  image_url TEXT NOT NULL,
+  status TEXT DEFAULT 'pending', -- pending | processing | done | error
+  tags TEXT[],
+  error_msg TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE tag_requests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "users_own_tag_requests" ON tag_requests FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+```
 
 ---
 
@@ -60,39 +78,38 @@ El `--green` del proyecto es el acento verde del usuario. Los botones de publica
 
 | Archivo | Descripción |
 |---------|-------------|
-| `src/pages/ConnectionsPage.jsx` | Telegram, Gmail, Companion App, Mistral AI |
-| `src/pages/PublishPage.jsx` | Panel multi-paso de publicación (4 pasos) |
-| `src/pages/PublicationsPage.jsx` | Historial de publicaciones |
-| `src/lib/tagGenerator.js` | Genera tags con Mistral (usa `mistralApiKey` + `mistralModel`) |
+| `src/pages/ConnectionsPage.jsx` | Telegram, Gmail, Companion App, Mistral AI (con selector de modelo) |
+| `src/pages/PublishPage.jsx` | Panel multi-paso publicación (4 pasos) — paso 2 = tags |
+| `src/pages/PublicationsPage.jsx` | Historial publicaciones (thumbnails 80px, botón eliminar) |
+| `src/lib/tagGenerator.js` | Genera tags — intenta localhost:54322 (falla por Mixed Content) → worker CF (falla 530) |
 | `src/lib/publishJobsDb.js` | Inserta/lee `publish_jobs` en Supabase |
-| `src/lib/publicationsDb.js` | Inserta/lee `publications` en Supabase |
-| `src/store/appConfig.js` | Config global (localStorage + Supabase profiles) |
-| `src/lib/AuthContext.jsx` | Carga perfil desde Supabase al login, incluye `mistralApiKey` |
-| `companion-app/src/main.js` | Electron main: polling de publish_jobs, OAuth Google |
-| `companion-app/src/platforms/` | e621, inkbunny, weasyl, bluesky, telegram, discord |
-| `companion-app/ui/settings.html/js` | UI de configuración de la companion |
-| `companion-app/dist/win-unpacked/` | `.exe` ya compilado |
+| `src/store/appConfig.js` | Config global (localStorage + Supabase) — incluye mistralModel, tagBackend |
+| `r2-worker/src/index.js` | CF Worker: R2 proxy, /tag endpoint (falla 530), e621 proxy |
+| `companion-app/src/main.js` | Electron main: polling jobs, tag server local (puerto 54322), OAuth |
+| `companion-app/src/wdTagger.js` | WD-Tagger client para Node.js (funciona desde PC, no desde browser) |
+| `companion-app/src/platforms/inkbunny.js` | Publica en Inkbunny via API (visibility=yes, notify_followers=yes) |
 
-## Tablas Supabase relevantes
-- `publish_jobs` — cola de jobs (task_id es TEXT, no UUID)
-- `publications` — historial de publicaciones
-- `profiles` — config del usuario (incluye `mistral_api_key`, `mistral_model`)
-
-## SQL ejecutado
-```sql
--- Ya ejecutado:
-ALTER TABLE publish_jobs ALTER COLUMN task_id TYPE TEXT USING task_id::TEXT;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS mistral_api_key TEXT;
-
--- PENDIENTE ejecutar:
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS mistral_model TEXT DEFAULT 'pixtral-large-latest';
-```
-
-## Flujo de publicación
-1. Kanban → tarjeta con `stage: Entregado` → botón "📢 Preparar publicación"
+## Flujo de publicación (actual)
+1. Kanban → tarjeta `stage: Entregado` → botón "📢 Preparar publicación"
 2. Navega a `/#/publish/:taskId` (PublishPage.jsx)
 3. Paso 1: título, descripción, rating
-4. Paso 2: Mistral genera tags (usa `mistralApiKey` + `mistralModel` de appConfig)
-5. Paso 3: seleccionar plataformas (e621, inkbunny, weasyl, bluesky, telegram, discord)
+4. Paso 2: **ROTO** — WD-Tagger falla (Mixed Content / CF 530)
+5. Paso 3: seleccionar plataformas
 6. Paso 4: confirmar → `insertPublishJob()` → Supabase `publish_jobs`
-7. Companion App (Electron) hace polling cada 5s → procesa el job → abre navegador pre-llenado
+7. Companion App hace polling → descarga imagen → publica en plataformas
+
+## Tablas Supabase relevantes
+- `publish_jobs` — cola de jobs (task_id es TEXT)
+- `publications` — historial
+- `profiles` — config (mistral_api_key, mistral_model)
+
+## Companion App
+- Versión actual compilada: `companion-app/dist/win-unpacked/Commission Manager Companion.exe`
+- Puerto 54322: servidor local WD-Tagger (INÚTIL desde HTTPS — Mixed Content)
+- Puerto 54321: OAuth callback server (funciona)
+- Polling Supabase cada 5s para publish_jobs
+
+## Próximos pasos recomendados
+1. **Fix WD-Tagger via Supabase tag_requests table** — la única solución que funciona sin Mixed Content ni CF 530
+2. Recompilar companion con soporte para polling tag_requests
+3. La web escucha con Supabase Realtime en tag_requests para recibir tags
