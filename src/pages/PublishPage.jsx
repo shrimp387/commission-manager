@@ -168,11 +168,12 @@ export default function PublishPage() {
   async function generateTagsAuto() {
     setLoadingTags(true)
     setTagsError(null)
+    setLoadingStatus(null)
+    
     try {
       const generated = await generateTags(highRes.url, tagBackend, (msg) => {
         // Show status messages from the tag generation process
         setTagsError(null)
-        // Use a temporary status display via tagsError with info styling
         setLoadingStatus(msg)
       })
       setTags(generated)
@@ -180,8 +181,15 @@ export default function PublishPage() {
     } catch (err) {
       console.error('[PublishPage] generateTagsAuto error:', err)
       setLoadingStatus(null)
+      
       if (err instanceof ConfigError) {
         setTagsError(err.message)
+      } else if (err.message.includes('CORS')) {
+        // CORS-specific error with helpful instructions
+        setTagsError(
+          `⚠️ CORS Error: ${err.message} ` +
+          `Si acabas de configurar CORS en R2, espera 5 minutos y recarga la página en modo incógnito (Ctrl+Shift+N).`
+        )
       } else {
         setTagsError(`Error: ${err.message}`)
       }

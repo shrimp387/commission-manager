@@ -27,17 +27,20 @@ const E621_MODELS = {
 
 /**
  * Downloads image as buffer for processing
- * Uses a proxy approach to avoid CORS issues with R2
+ * Uses cache-busting and fallback to handle CORS issues
  */
 async function downloadImageForTagging(imageUrl) {
   console.log('[e621Tagger] 📥 Downloading image:', imageUrl)
   
   try {
-    // Try direct download first (works if CORS is configured)
-    console.log('[e621Tagger] 🔄 Attempting direct download...')
-    const res = await fetch(imageUrl, {
+    // Add cache-busting parameter to force fresh request (avoids cached CORS errors)
+    const cacheBustUrl = imageUrl + (imageUrl.includes('?') ? '&' : '?') + `_cb=${Date.now()}`
+    console.log('[e621Tagger] 🔄 Attempting direct download with cache-busting...')
+    
+    const res = await fetch(cacheBustUrl, {
       mode: 'cors',
       credentials: 'omit',
+      cache: 'no-store', // Don't cache this request
     })
     
     console.log('[e621Tagger] 📡 Response status:', res.status, res.statusText)
@@ -53,7 +56,7 @@ async function downloadImageForTagging(imageUrl) {
     
     console.log('[e621Tagger] 📦 Reading arrayBuffer...')
     const arrayBuffer = await res.arrayBuffer()
-    console.log('[e621Tagger] ✅ Downloaded:', arrayBuffer.byteLength, 'bytes')
+    console.log('[e621Tagger] ✅ Downloaded via direct fetch:', arrayBuffer.byteLength, 'bytes')
     
     return {
       buffer: new Uint8Array(arrayBuffer),
@@ -61,9 +64,11 @@ async function downloadImageForTagging(imageUrl) {
     }
   } catch (directErr) {
     console.warn('[e621Tagger] ⚠️ Direct download failed:', directErr.message)
-    console.log('[e621Tagger] 🔄 Trying proxy download via data URL...')
+    console.log('[e621Tagger] 🔄 Trying fallback: Canvas proxy method...')
     
-    // Fallback: Try loading via Image element (bypasses CORS for reading)
+    // Fallback: Load image via HTML Image element (bypasses CORS restrictions)
+    // This works because the browser allows loading images cross-origin,
+    // even if fetch() is blocked by CORS
     try {
       const img = new Image()
       img.crossOrigin = 'anonymous'
@@ -71,11 +76,14 @@ async function downloadImageForTagging(imageUrl) {
       const loadPromise = new Promise((resolve, reject) => {
         img.onload = () => resolve(img)
         img.onerror = () => reject(new Error('Image load failed'))
-        setTimeout(() => reject(new Error('Image load timeout')), 30000)
+        setTimeout(() => reject(new Error('Image load timeout (30s)')), 30000)
       })
       
-      img.src = imageUrl
+      // Load image with cache-busting
+      img.src = imageUrl + (imageUrl.includes('?') ? '&' : '?') + `_cb=${Date.now()}`
       await loadPromise
+      
+      console.log('[e621Tagger] ✅ Image loaded via <img> element:', img.naturalWidth, 'x', img.naturalHeight)
       
       // Convert image to canvas and extract bytes
       const canvas = document.createElement('canvas')
@@ -83,6 +91,8 @@ async function downloadImageForTagging(imageUrl) {
       canvas.height = img.naturalHeight
       const ctx = canvas.getContext('2d')
       ctx.drawImage(img, 0, 0)
+      
+      console.log('[e621Tagger] 🎨 Converting canvas to blob...')
       
       // Get image data as blob
       const blob = await new Promise((resolve, reject) => {
@@ -94,16 +104,23 @@ async function downloadImageForTagging(imageUrl) {
       })
       
       const arrayBuffer = await blob.arrayBuffer()
-      console.log('[e621Tagger] ✅ Downloaded via canvas:', arrayBuffer.byteLength, 'bytes')
+      console.log('[e621Tagger] ✅ Downloaded via canvas fallback:', arrayBuffer.byteLength, 'bytes')
       
       return {
         buffer: new Uint8Array(arrayBuffer),
         contentType: 'image/png'
       }
     } catch (canvasErr) {
-      console.error('[e621Tagger] ❌ Canvas fallback failed:', canvasErr.message)
-      console.error('[e621Tagger] 🔍 Error details:', canvasErr)
-      throw new Error(`Failed to download image: ${directErr.message}. CORS is blocking access. Please configure CORS on your R2 bucket.`)
+      console.error('[e621Tagger] ❌ Canvas fallback also failed:', canvasErr.message)
+      console.error('[e621Tagger] 🔍 Direct error:', directErr)
+      console.error('[e621Tagger] 🔍 Canvas error:', canvasErr)
+      
+      // Provide helpful error message
+      throw new Error(
+        `Failed to download image. CORS is blocking access. ` +
+        `Please wait 5 minutes for CORS configuration to propagate, ` +
+        `then try again in an incognito window to clear cache.`
+      )
     }
   }
 }
