@@ -6,8 +6,8 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "build": "electron-builder --win",
-    "build:portable": "electron-builder --win portable"
+    "build": "electron-builder --win --dir",
+    "build:dir": "electron-builder --win --dir"
   },
   "keywords": [],
   "author": "woundzengberg",
@@ -20,18 +20,18 @@
   },
   "devDependencies": {
     "electron": "^31.0.0",
-    "electron-builder": "^24.13.0"
+    "electron-builder": "^22.14.13"
   },
   "build": {
     "appId": "com.commissionmanager.companion",
     "productName": "Commission Manager Companion",
-    "win": {
-      "target": ["nsis", "portable"],
-      "icon": "assets/icon.ico"
+    "asar": true,
+    "directories": {
+      "output": "dist"
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+    "win": {
+      "target": [{ "target": "dir", "arch": ["x64"] }]
+    },
+    "electronDist": null
   }
 }
