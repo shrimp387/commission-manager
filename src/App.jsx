@@ -9,6 +9,7 @@ import PortfolioPage from './pages/PortfolioPage.jsx'
 import GuidePage from './pages/GuidePage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
 import ConnectionsPage from './pages/ConnectionsPage.jsx'
+import ConnectionTestPage from './pages/ConnectionTestPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import ArchivedPage from './pages/ArchivedPage.jsx'
 import ClientsPage from './pages/ClientsPage.jsx'
@@ -118,6 +119,7 @@ function AppShell() {
           <Route path="/guide"       element={<GuidePage />} />
           <Route path="/settings"    element={<SettingsPage />} />
           <Route path="/connections" element={<ConnectionsPage />} />
+          <Route path="/connection-test" element={<ConnectionTestPage />} />
           <Route path="/clients"     element={<ClientsPage />} />
           <Route path="/calendar"    element={<CalendarPage />} />
           <Route path="/media"        element={<MediaPage />} />

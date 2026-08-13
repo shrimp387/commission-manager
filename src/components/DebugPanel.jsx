@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../lib/AuthContext.jsx'
 import StorageMonitor from './StorageMonitor.jsx'
+import ConnectionTestModal from './ConnectionTestModal.jsx'
 
 const TRACKED_KEYS = [
   'task_fields',
@@ -39,6 +40,7 @@ export default function DebugPanel() {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [showMonitor, setShowMonitor] = useState(false)
+  const [showTests, setShowTests] = useState(false)
   const [snap, setSnap] = useState({})
 
   // Visible cuando hay usuario logueado O en localhost O con ?debug=1
@@ -74,6 +76,19 @@ export default function DebugPanel() {
     }}>
       {/* Botón principal — siempre visible cuando hay sesión */}
       <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+        {/* Botón Test de Conexiones */}
+        <button
+          onClick={() => setShowTests(true)}
+          title="Test de Conexiones — diagnosticar companion app y Supabase"
+          style={{
+            background: '#7c6af5', color: '#fff',
+            border: '1px solid #7c6af5', borderRadius: 6,
+            padding: '4px 10px', cursor: 'pointer', fontWeight: 700, fontSize: 11,
+          }}
+        >
+          🔧 Tests
+        </button>
+
         {/* Botón directo al Storage Monitor */}
         <button
           onClick={() => setShowMonitor(true)}
@@ -160,6 +175,7 @@ export default function DebugPanel() {
       )}
 
       {showMonitor && <StorageMonitor onClose={() => setShowMonitor(false)} />}
+      {showTests && <ConnectionTestModal onClose={() => setShowTests(false)} />}
     </div>
   )
 }

@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test de Conexiones - Commission Manager</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f1a;
+      color: #e0e0f0;
+      padding: 40px;
+    }
+    .container { max-width: 1000px; margin: 0 auto; }
+    h1 { color: #7c6af5; margin-bottom: 30px; }
+    .test-section {
+      background: #1a1a2e;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 2px solid #30363d;
+    }
+    .test-section h2 {
+      color: #fff;
+      margin-bottom: 15px;
+      font-size: 1.3rem;
+    }
+    .test-button {
+      background: #7c6af5;
+      color: #fff;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 1rem;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    .test-button:hover { opacity: 0.85; }
+    .test-button:disabled {
+      background: #444;
+      cursor: not-allowed;
+    }
+    .result {
+      margin-top: 15px;
+      padding: 15px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .result.success {
+      background: rgba(81, 207, 102, 0.1);
+      border: 1px solid #51cf66;
+      color: #51cf66;
+    }
+    .result.error {
+      background: rgba(255, 107, 107, 0.1);
+      border: 1px solid #ff6b6b;
+      color: #ff6b6b;
+    }
+    .result.info {
+      background: rgba(124, 106, 245, 0.1);
+      border: 1px solid #7c6af5;
+      color: #c9d1d9;
+    }
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    .status-indicator.unknown { background: #666; }
+    .status-indicator.ok { background: #51cf66; }
+    .status-indicator.error { background: #ff6b6b; }
+    .input-group {
+      margin: 15px 0;
+    }
+    .input-group label {
+      display: block;
+      margin-bottom: 5px;
+      color: #c9d1d9;
+    }
+    .input-group input {
+      width: 100%;
+      padding: 10px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #e0e0f0;
+      font-family: 'Courier New', monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔧 Test de Conexiones - Commission Manager</h1>
+    
+    <!-- TEST 1: Companion App - Tag Server -->
+    <div class="test-section">
+      <h2>
+        <span class="status-indicator" id="status-companion"></span>
+        1. Companion App - WD Tagger Server
+      </h2>
+      <p style="color: #888; margin-bottom: 15px;">
+        Verifica si la companion app está corriendo y respondiendo en <code>http://localhost:54322</code>
+      </p>
+      <button class="test-button" onclick="testCompanionHealth()">
+        🏥 Test Health Check
+      </button>
+      <button class="test-button" onclick="testCompanionTagger()">
+        🏷️ Test WD-Tagger
+      </button>
+      <div id="result-companion"></div>
+    </div>
+
+    <!-- TEST 2: Supabase Connection -->
+    <div class="test-section">
+      <h2>
+        <span class="status-indicator" id="status-supabase"></span>
+        2. Supabase - Conexión desde Web App
+      </h2>
+      <p style="color: #888; margin-bottom: 15px;">
+        Verifica la conexión a Supabase y autenticación del usuario
+      </p>
+      
+      <div class="input-group">
+        <label>Supabase URL:</label>
+        <input type="text" id="supabase-url" value="https://yhlhsqhlnzgrhagoeosp.supabase.co" />
+      </div>
+      
+      <div class="input-group">
+        <label>Supabase Anon Key:</label>
+        <input type="password" id="supabase-key" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlobGhzcWhsbnpncmhhZ29lb3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzMjEzMjIsImV4cCI6MjEwMTg5NzMyMn0.5OR7M62fNWnsPzNuyu06ub-joZusH9Ud9yeTcvp6dWc" />
+      </div>
+      
+      <button class="test-button" onclick="testSupabaseConnection()">
+        🔌 Test Conexión
+      </button>
+      <button class="test-button" onclick="testSupabaseAuth()">
+        🔐 Test Autenticación
+      </button>
+      <button class="test-button" onclick="testPublishJobsTable()">
+        📋 Test Tabla publish_jobs
+      </button>
+      <div id="result-supabase"></div>
+    </div>
+
+    <!-- TEST 3: Insert Job Test -->
+    <div class="test-section">
+      <h2>
+        <span class="status-indicator" id="status-insert"></span>
+        3. Insert Job - Test Completo
+      </h2>
+      <p style="color: #888; margin-bottom: 15px;">
+        Intenta insertar un job de prueba en la tabla publish_jobs
+      </p>
+      <button class="test-button" onclick="testInsertJob()">
+        ➕ Insertar Job de Prueba
+      </button>
+      <button class="test-button" onclick="testListJobs()">
+        📊 Listar Mis Jobs
+      </button>
+      <div id="result-insert"></div>
+    </div>
+
+    <!-- TEST 4: Companion Polling -->
+    <div class="test-section">
+      <h2>
+        <span class="status-indicator" id="status-polling"></span>
+        4. Companion App - Polling de Jobs
+      </h2>
+      <p style="color: #888; margin-bottom: 15px;">
+        Verifica que la companion app esté recogiendo los jobs pendientes
+      </p>
+      <button class="test-button" onclick="checkCompanionLogs()">
+        📜 Ver Instrucciones
+      </button>
+      <div id="result-polling"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+    
+    window.supabaseClient = null
+    
+    function showResult(elementId, message, type = 'info') {
+      const el = document.getElementById(elementId)
+      el.innerHTML = `<div class="result ${type}">${message}</div>`
+    }
+    
+    function updateStatus(statusId, state) {
+      const el = document.getElementById(statusId)
+      el.className = `status-indicator ${state}`
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TEST 1: Companion App
+    // ═══════════════════════════════════════════════════════════════
+    
+    window.testCompanionHealth = async function() {
+      showResult('result-companion', '⏳ Conectando a http://localhost:54322/health...', 'info')
+      updateStatus('status-companion', 'unknown')
+      
+      try {
+        const res = await fetch('http://localhost:54322/health', {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        
+        const data = await res.json()
+        showResult('result-companion', 
+          `✅ COMPANION APP ESTÁ CORRIENDO\n\n${JSON.stringify(data, null, 2)}`,
+          'success'
+        )
+        updateStatus('status-companion', 'ok')
+      } catch (err) {
+        showResult('result-companion',
+          `❌ COMPANION APP NO RESPONDE\n\nError: ${err.message}\n\n` +
+          `Solución:\n` +
+          `1. Abre la companion app: companion-app/dist/win-unpacked/Commission Manager Companion.exe\n` +
+          `2. Verifica que esté corriendo (icono en la bandeja del sistema)\n` +
+          `3. Vuelve a intentar este test`,
+          'error'
+        )
+        updateStatus('status-companion', 'error')
+      }
+    }
+    
+    window.testCompanionTagger = async function() {
+      showResult('result-companion', '⏳ Probando WD-Tagger en companion app...', 'info')
+      
+      try {
+        const testImage = 'https://images.unsplash.com/photo-1518791841217-8f162f1e1131'
+        
+        const res = await fetch('http://localhost:54322/tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrl: testImage, threshold: 0.35 }),
+        })
+        
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        
+        const data = await res.json()
+        showResult('result-companion',
+          `✅ WD-TAGGER FUNCIONA\n\nTags generados: ${data.tags?.length || 0}\n\n${JSON.stringify(data, null, 2)}`,
+          'success'
+        )
+        updateStatus('status-companion', 'ok')
+      } catch (err) {
+        showResult('result-companion',
+          `❌ WD-TAGGER NO RESPONDE\n\nError: ${err.message}`,
+          'error'
+        )
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TEST 2: Supabase
+    // ═══════════════════════════════════════════════════════════════
+    
+    window.testSupabaseConnection = async function() {
+      showResult('result-supabase', '⏳ Conectando a Supabase...', 'info')
+      updateStatus('status-supabase', 'unknown')
+      
+      try {
+        const url = document.getElementById('supabase-url').value
+        const key = document.getElementById('supabase-key').value
+        
+        if (!url || !key) throw new Error('URL o Key vacíos')
+        
+        window.supabaseClient = createClient(url, key)
+        
+        // Test simple query
+        const { data, error } = await window.supabaseClient
+          .from('tasks')
+          .select('id')
+          .limit(1)
+        
+        if (error) throw error
+        
+        showResult('result-supabase',
+          `✅ CONEXIÓN A SUPABASE OK\n\nURL: ${url}\nQuery test exitoso`,
+          'success'
+        )
+        updateStatus('status-supabase', 'ok')
+      } catch (err) {
+        showResult('result-supabase',
+          `❌ ERROR DE CONEXIÓN A SUPABASE\n\nError: ${err.message}\n\n` +
+          `Verifica:\n` +
+          `1. URL correcta\n` +
+          `2. Anon Key correcta\n` +
+          `3. Proyecto activo en Supabase`,
+          'error'
+        )
+        updateStatus('status-supabase', 'error')
+      }
+    }
+    
+    window.testSupabaseAuth = async function() {
+      if (!window.supabaseClient) {
+        showResult('result-supabase', '⚠️ Primero ejecuta "Test Conexión"', 'error')
+        return
+      }
+      
+      showResult('result-supabase', '⏳ Verificando autenticación...', 'info')
+      
+      try {
+        const { data: { user }, error } = await window.supabaseClient.auth.getUser()
+        
+        if (error) throw error
+        
+        if (!user) {
+          showResult('result-supabase',
+            `⚠️ NO HAY USUARIO AUTENTICADO\n\n` +
+            `Solución:\n` +
+            `1. Abre la app web\n` +
+            `2. Haz login con Google\n` +
+            `3. Vuelve a intentar este test`,
+            'error'
+          )
+          updateStatus('status-supabase', 'error')
+          return
+        }
+        
+        showResult('result-supabase',
+          `✅ USUARIO AUTENTICADO\n\n` +
+          `ID: ${user.id}\n` +
+          `Email: ${user.email}\n` +
+          `Provider: ${user.app_metadata.provider}`,
+          'success'
+        )
+        updateStatus('status-supabase', 'ok')
+      } catch (err) {
+        showResult('result-supabase',
+          `❌ ERROR DE AUTENTICACIÓN\n\nError: ${err.message}`,
+          'error'
+        )
+        updateStatus('status-supabase', 'error')
+      }
+    }
+    
+    window.testPublishJobsTable = async function() {
+      if (!window.supabaseClient) {
+        showResult('result-supabase', '⚠️ Primero ejecuta "Test Conexión"', 'error')
+        return
+      }
+      
+      showResult('result-supabase', '⏳ Verificando tabla publish_jobs...', 'info')
+      
+      try {
+        const { data, error, count } = await window.supabaseClient
+          .from('publish_jobs')
+          .select('*', { count: 'exact', head: false })
+          .limit(1)
+        
+        if (error) {
+          if (error.message.includes('does not exist')) {
+            showResult('result-supabase',
+              `❌ TABLA publish_jobs NO EXISTE\n\n` +
+              `Error: ${error.message}\n\n` +
+              `Solución:\n` +
+              `1. Abre Supabase Dashboard\n` +
+              `2. Ve a SQL Editor\n` +
+              `3. Ejecuta el archivo: companion-app/sql/publish_jobs.sql`,
+              'error'
+            )
+            updateStatus('status-supabase', 'error')
+            return
+          }
+          throw error
+        }
+        
+        showResult('result-supabase',
+          `✅ TABLA publish_jobs EXISTE\n\n` +
+          `Total de registros: ${count ?? 0}\n` +
+          `Primera fila: ${data?.length > 0 ? JSON.stringify(data[0], null, 2) : 'Sin datos'}`,
+          'success'
+        )
+        updateStatus('status-supabase', 'ok')
+      } catch (err) {
+        showResult('result-supabase',
+          `❌ ERROR AL VERIFICAR TABLA\n\nError: ${err.message}`,
+          'error'
+        )
+        updateStatus('status-supabase', 'error')
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TEST 3: Insert Job
+    // ═══════════════════════════════════════════════════════════════
+    
+    window.testInsertJob = async function() {
+      if (!window.supabaseClient) {
+        showResult('result-insert', '⚠️ Primero ejecuta tests de Supabase', 'error')
+        return
+      }
+      
+      showResult('result-insert', '⏳ Insertando job de prueba...', 'info')
+      updateStatus('status-insert', 'unknown')
+      
+      try {
+        const { data: { user } } = await window.supabaseClient.auth.getUser()
+        if (!user) throw new Error('No hay usuario autenticado')
+        
+        const testJob = {
+          user_id: user.id,
+          task_id: null,
+          task_name: 'Test Job',
+          image_url: 'https://images.unsplash.com/photo-1518791841217-8f162f1e1131',
+          platforms: ['telegram', 'discord'],
+          title: 'Test Artwork',
+          description: 'Job de prueba creado por test-connections.html',
+          tags: ['test', 'debug', 'furry'],
+          rating: 'safe',
+          status: 'pending',
+        }
+        
+        const { data, error } = await window.supabaseClient
+          .from('publish_jobs')
+          .insert(testJob)
+          .select()
+          .single()
+        
+        if (error) throw error
+        
+        showResult('result-insert',
+          `✅ JOB INSERTADO CORRECTAMENTE\n\n` +
+          `Job ID: ${data.id}\n` +
+          `Status: ${data.status}\n` +
+          `Created: ${data.created_at}\n\n` +
+          `Ahora:\n` +
+          `1. Abre los logs de la companion app\n` +
+          `2. Espera 5-10 segundos (polling)\n` +
+          `3. Deberías ver: "Found 1 pending jobs"`,
+          'success'
+        )
+        updateStatus('status-insert', 'ok')
+      } catch (err) {
+        showResult('result-insert',
+          `❌ ERROR AL INSERTAR JOB\n\n` +
+          `Error: ${err.message}\n` +
+          `Code: ${err.code}\n\n` +
+          `Posibles causas:\n` +
+          `- RLS policy no permite insert\n` +
+          `- Usuario no autenticado\n` +
+          `- Tabla no existe`,
+          'error'
+        )
+        updateStatus('status-insert', 'error')
+      }
+    }
+    
+    window.testListJobs = async function() {
+      if (!window.supabaseClient) {
+        showResult('result-insert', '⚠️ Primero ejecuta tests de Supabase', 'error')
+        return
+      }
+      
+      showResult('result-insert', '⏳ Listando jobs...', 'info')
+      
+      try {
+        const { data: { user } } = await window.supabaseClient.auth.getUser()
+        if (!user) throw new Error('No hay usuario autenticado')
+        
+        const { data, error } = await window.supabaseClient
+          .from('publish_jobs')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(10)
+        
+        if (error) throw error
+        
+        showResult('result-insert',
+          `✅ JOBS DEL USUARIO: ${data.length}\n\n` +
+          JSON.stringify(data, null, 2),
+          'success'
+        )
+      } catch (err) {
+        showResult('result-insert',
+          `❌ ERROR AL LISTAR JOBS\n\nError: ${err.message}`,
+          'error'
+        )
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TEST 4: Companion Polling
+    // ═══════════════════════════════════════════════════════════════
+    
+    window.checkCompanionLogs = function() {
+      showResult('result-polling',
+        `📋 INSTRUCCIONES PARA VERIFICAR POLLING\n\n` +
+        `1. Abre la companion app\n` +
+        `2. Click derecho en el icono del tray → "📋 Ver Logs"\n` +
+        `3. Busca líneas como:\n` +
+        `   [poll] 🔍 Polling for userId: xxx\n` +
+        `   [poll] 📊 Found X pending jobs\n\n` +
+        `Si ves "Found 0 pending jobs" después de insertar:\n` +
+        `→ Los userId no coinciden (web app vs companion)\n\n` +
+        `Si ves "Found 1 pending jobs":\n` +
+        `→ ¡Funciona! El job será procesado\n\n` +
+        `Si no ves logs de polling:\n` +
+        `→ La companion app no está conectada a Supabase`,
+        'info'
+      )
+      updateStatus('status-polling', 'unknown')
+    }
+  </script>
+</body>
+</html>
