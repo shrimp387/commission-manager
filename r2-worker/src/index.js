@@ -415,8 +415,18 @@ export default {
       }
 
       // Call HuggingFace WD-Tagger
+      // HF_TOKEN is required — set via: wrangler secret put HF_TOKEN
       const hfHeaders = { 'Content-Type': contentType }
-      if (env.HF_TOKEN) hfHeaders['Authorization'] = `Bearer ${env.HF_TOKEN}`
+      if (env.HF_TOKEN) {
+        hfHeaders['Authorization'] = `Bearer ${env.HF_TOKEN}`
+      } else {
+        // No token configured — reject with clear message
+        return new Response(JSON.stringify({
+          error: 'HF_TOKEN not configured in worker. Run: wrangler secret put HF_TOKEN'
+        }), {
+          status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
 
       const hfRes = await fetch(
         'https://api-inference.huggingface.co/models/SmilingWolf/wd-v1-4-swinv2-tagger-v2',

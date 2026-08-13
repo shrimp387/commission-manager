@@ -1,7 +1,7 @@
 {
   "major": 1,
   "minor": 5,
-  "patch": 0,
+  "patch": 1,
   "history": [
     {
       "version": "v1.0.0",
@@ -68,6 +68,12 @@
       "date": "2026-08-11T23:33:43.140432",
       "message": "feat(ahora se puede subir a e621): se suben cosa a e621 y tambien ay una ia",
       "bump": "minor"
+    },
+    {
+      "version": "v1.5.1",
+      "date": "2026-08-12T19:43:49.278660",
+      "message": "fix(se añadio token de huggin face): ticket de huggin face ennw rangler",
+      "bump": "patch"
     }
   ]
 }
