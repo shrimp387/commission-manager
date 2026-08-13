@@ -353,7 +353,12 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
           console.log('[PublishPanel] ✅ Job creado en Supabase:', result.id)
           publishedPlatforms.push(...companionSelected)
         } catch (err) {
-          console.error('[PublishPanel] ❌ Error al enviar job a companion:', err)
+          console.error('[PublishPanel] ❌ Error al enviar job a companion:', {
+            error: err,
+            message: err?.message,
+            code: err?.code,
+            stack: err?.stack,
+          })
           errors.push(`companion: ${err?.message || 'Error al enviar job'}`)
         }
       }

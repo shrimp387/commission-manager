@@ -1,7 +1,7 @@
 {
   "major": 1,
-  "minor": 5,
-  "patch": 2,
+  "minor": 6,
+  "patch": 0,
   "history": [
     {
       "version": "v1.0.0",
@@ -80,6 +80,12 @@
       "date": "2026-08-12T22:02:15.763721",
       "message": "fix(companion logs app logs): logs everywhere",
       "bump": "patch"
+    },
+    {
+      "version": "v1.6.0",
+      "date": "2026-08-12T22:13:18.994410",
+      "message": "feat(nuevo): 2",
+      "bump": "minor"
     }
   ]
 }
