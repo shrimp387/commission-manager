@@ -54,6 +54,7 @@ app.whenReady().then(async () => {
   createTray()
   initSupabase()
   startOAuthCallback()   // listen for Google OAuth redirect
+  startTagServer()       // local WD-Tagger endpoint for web app
   startPolling()
 
   // Open settings on first run if user has not logged in yet
@@ -198,6 +199,8 @@ function startPolling() {
   poll() // run immediately on start
 }
 
+const { generateTagsWDTagger } = require('./wdTagger')
+
 // ── Process a single publish job ──────────────────────────────────────────────
 async function processJob(job) {
   console.log(`[job] Processing job ${job.id} for platforms: ${job.platforms?.join(', ')}`)
@@ -208,12 +211,34 @@ async function processJob(job) {
     .update({ status: 'running', started_at: new Date().toISOString() })
     .eq('id', job.id)
 
+  // ── Auto-generate tags with WD-Tagger if job has none ──────────────────────
+  let jobTags = job.tags ?? []
+  if (jobTags.length === 0 && job.image_url) {
+    try {
+      console.log('[job] No tags found — generating with WD-Tagger...')
+      const hfToken = store.get('hfToken') || ''
+      jobTags = await generateTagsWDTagger(job.image_url, hfToken)
+      console.log(`[job] WD-Tagger generated ${jobTags.length} tags`)
+      // Save generated tags back to Supabase so the web app sees them
+      await supabase
+        .from('publish_jobs')
+        .update({ tags: jobTags })
+        .eq('id', job.id)
+    } catch (err) {
+      console.warn('[job] WD-Tagger failed:', err.message)
+      // Not fatal — continue publishing without tags
+    }
+  }
+
+  // Use generated tags for publishing
+  const jobWithTags = { ...job, tags: jobTags }
+
   const results = []
   const errors  = []
 
   for (const platform of (job.platforms || [])) {
     try {
-      const result = await jobRunner.publishToPlatform(platform, job)
+      const result = await jobRunner.publishToPlatform(platform, jobWithTags)
       results.push({ platform, ok: true, url: result?.url })
     } catch (err) {
       errors.push({ platform, error: err.message })
@@ -231,6 +256,60 @@ async function processJob(job) {
       errors,
     })
     .eq('id', job.id)
+}
+
+// ── Local tag server (port 54322) ────────────────────────────────────────────
+// The web app can call http://localhost:54322/tag to generate tags via WD-Tagger
+// running locally on the artist's PC — no Cloudflare IP blocks.
+function startTagServer() {
+  const http = require('http')
+
+  const server = http.createServer(async (req, res) => {
+    // CORS — allow the Vercel app and localhost
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
+
+    if (req.method === 'POST' && req.url === '/tag') {
+      let body = ''
+      req.on('data', c => { body += c })
+      req.on('end', async () => {
+        try {
+          const { imageUrl, threshold = 0.35 } = JSON.parse(body)
+          if (!imageUrl) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'imageUrl required' }))
+            return
+          }
+          const hfToken = store.get('hfToken') || ''
+          const tags = await generateTagsWDTagger(imageUrl, hfToken)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, tags }))
+        } catch (err) {
+          console.error('[tagServer] error:', err.message)
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+      return
+    }
+
+    // Health check
+    if (req.method === 'GET' && req.url === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, service: 'companion-tag-server' }))
+      return
+    }
+
+    res.writeHead(404); res.end()
+  })
+
+  server.listen(54322, '127.0.0.1', () => {
+    console.log('[tagServer] Listening on http://localhost:54322')
+  })
+  server.on('error', e => console.warn('[tagServer] error:', e.message))
 }
 
 // ── OAuth callback server ─────────────────────────────────────────────────────

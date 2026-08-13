@@ -47,20 +47,18 @@ export function identifyHighResAttachment(attachments) {
   )
 }
 
-// ── WD-Tagger (via R2 Worker proxy) ──────────────────────────────────────────
-// El worker de Cloudflare actúa de proxy server-side a HuggingFace.
-// Evita CORS y el cold-start desde el navegador.
+// ── WD-Tagger (via companion app local server OR R2 Worker proxy) ─────────────
+// Priority 1: companion app running on localhost:54322 (no IP blocks, free)
+// Priority 2: R2 Worker proxy → HuggingFace (may have 530 issues)
 
+const COMPANION_TAG_URL = 'http://localhost:54322/tag'
 const R2_WORKER_URL = 'https://commission-manager-r2.commission-manager-studio.workers.dev'
-const WD_TIMEOUT_MS = 45_000  // HF puede tardar hasta 40s en cold start
+const WD_TIMEOUT_MS = 45_000
 const WD_THRESHOLD  = 0.35
 
 /**
- * Genera tags con WD-Tagger vía el proxy worker de Cloudflare.
- * No requiere configuración del usuario — funciona out of the box.
- *
- * @param {string} imageUrl — URL pública de la imagen (en R2)
- * @returns {Promise<string[]>} array de tags normalizados
+ * Genera tags con WD-Tagger.
+ * Intenta primero la companion app local, luego el worker de Cloudflare.
  */
 async function generateTagsWDTagger(imageUrl) {
   // Obtenemos el token de Supabase del localStorage para autenticar con el worker
@@ -72,6 +70,31 @@ async function generateTagsWDTagger(imageUrl) {
     authToken = session?.access_token || ''
   } catch {}
 
+  // ── Intento 1: companion app local ────────────────────────────────────────
+  try {
+    const localController = new AbortController()
+    const localTimer = setTimeout(() => localController.abort(), 3000) // 3s timeout para detección rápida
+    const localRes = await fetch(COMPANION_TAG_URL, {
+      method: 'POST',
+      signal: localController.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageUrl, threshold: WD_THRESHOLD }),
+    })
+    clearTimeout(localTimer)
+
+    if (localRes.ok) {
+      const data = await localRes.json()
+      if (data.ok && Array.isArray(data.tags)) {
+        console.debug(`[WD-Tagger] companion local: ${data.tags.length} tags`)
+        return data.tags
+      }
+    }
+  } catch (err) {
+    // Companion no está corriendo — fallback al worker
+    console.debug('[WD-Tagger] companion not available, using worker:', err.message)
+  }
+
+  // ── Intento 2: R2 Worker proxy ────────────────────────────────────────────
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), WD_TIMEOUT_MS)
 
@@ -86,16 +109,16 @@ async function generateTagsWDTagger(imageUrl) {
       body: JSON.stringify({ imageUrl, threshold: WD_THRESHOLD }),
     })
 
-    console.debug('[WD-Tagger] status:', res.status, res.statusText)
+    console.debug('[WD-Tagger] worker status:', res.status, res.statusText)
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      console.error('[WD-Tagger] error body:', body)
+      console.error('[WD-Tagger] worker error body:', body)
       if (res.status === 503 && body.error === 'model_loading') {
         throw new Error(body.message || 'WD-Tagger cargando, intenta en unos segundos')
       }
       if (res.status === 401) {
-        throw new Error('No autorizado con el worker (token expirado). Recarga la página e intenta de nuevo.')
+        throw new Error('No autorizado con el worker. Recarga la página e intenta de nuevo.')
       }
       throw new Error(body.error || `Error del servidor: HTTP ${res.status}`)
     }
@@ -112,7 +135,7 @@ async function generateTagsWDTagger(imageUrl) {
   } catch (err) {
     clearTimeout(timer)
     console.error('[WD-Tagger] catch:', err.name, err.message)
-    if (err.name === 'AbortError') throw new Error('Timeout al generar tags (el modelo tardó demasiado). Intenta de nuevo.')
+    if (err.name === 'AbortError') throw new Error('Timeout al generar tags. Intenta de nuevo.')
     throw err
   } finally {
     clearTimeout(timer)
