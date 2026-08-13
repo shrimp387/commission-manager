@@ -190,6 +190,14 @@ export default function PublishPage() {
           `⚠️ CORS Error: ${err.message} ` +
           `Si acabas de configurar CORS en R2, espera 5 minutos y recarga la página en modo incógnito (Ctrl+Shift+N).`
         )
+      } else if (err.message.includes('failed all models') || err.message.includes('Failed to fetch')) {
+        // HuggingFace rate limit or network error
+        setTagsError(
+          `⚠️ Error de HuggingFace: Los modelos no están respondiendo. ` +
+          `Posibles causas: rate limit (sin API token), modelos caídos, o problemas de red. ` +
+          `💡 Solución: Obtén un HuggingFace API token gratis en https://huggingface.co/settings/tokens ` +
+          `y configúralo en Conexiones → HuggingFace Token.`
+        )
       } else {
         setTagsError(`Error: ${err.message}`)
       }

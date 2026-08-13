@@ -50,6 +50,9 @@ const DEFAULTS = {
 
   // Tag generation backend: 'e621' (Poofy1, default) | 'pawfect' (FurAffinity) | 'mistral'
   tagBackend: 'e621',
+
+  // HuggingFace API token (optional, pero recomendado para evitar rate limits)
+  hfToken: '',
 }
 
 let _config = { ...DEFAULTS }
@@ -89,6 +92,7 @@ function syncToSupabase() {
         telegram_sticker_sets: _config.telegramStickerSets,
         mistral_api_key: _config.mistralApiKey,
         mistral_model: _config.mistralModel,
+        hf_token: _config.hfToken,
       })
     } catch (e) {
       // Supabase not ready or offline — localStorage is the fallback

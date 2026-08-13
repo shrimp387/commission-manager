@@ -176,16 +176,22 @@ export async function generateTags(imageUrl, backend, onStatus) {
   const cfg = getConfig()
   const resolvedBackend = backend ?? cfg.tagBackend ?? 'e621'
   
+  // Get HuggingFace token from config (optional)
+  const hfToken = cfg.hfToken || ''
+  
+  console.log('[tagGenerator] 🎯 Backend:', resolvedBackend)
+  console.log('[tagGenerator] 🔑 HF Token:', hfToken ? 'present' : 'not set')
+  
   if (resolvedBackend === 'mistral') {
     return generateTagsMistral(imageUrl)
   }
   
   if (resolvedBackend === 'pawfect') {
-    return generateTagsPAWFECT(imageUrl, cfg.hfToken, onStatus)
+    return generateTagsPAWFECT(imageUrl, hfToken, onStatus)
   }
   
   // Default: e621 (Poofy1)
-  return generateTagsE621(imageUrl, cfg.hfToken, onStatus)
+  return generateTagsE621(imageUrl, hfToken, onStatus)
 }
 
 export function parseTags(text) {
