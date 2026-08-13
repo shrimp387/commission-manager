@@ -3,6 +3,18 @@ import { getConfig, setConfig, setConfigMulti } from '../store/appConfig.js'
 import { useConfig } from '../hooks/useConfig.js'
 import PageBackgroundEditor from '../components/PageBackgroundEditor.jsx'
 import StorageMonitor from '../components/StorageMonitor.jsx'
+import {
+  isGmailConnected,
+  getGmailTokens,
+  openGoogleOAuth,
+  clearGmailTokens,
+} from '../utils/gmail.js'
+import {
+  getTelegramConfig,
+  saveTelegramConfig,
+  testTelegramConnection,
+} from '../utils/telegram.js'
+import { getTelegramConfig as getTelegramConfigDb } from '../lib/db.js'
 
 const FONTS = [
   { label: 'Inter (default)', value: 'Inter' },
@@ -46,11 +58,52 @@ export default function SettingsPage() {
   const [hfTestResult, setHfTestResult] = useState(null)
   const [mistralTestResult, setMistralTestResult] = useState(null)
 
+  // Gmail state
+  const [gmailConnected, setGmailConnected] = useState(false)
+  const [gmailEmail, setGmailEmail] = useState(null)
+
+  // Telegram state
+  const [tgToken, setTgToken] = useState('')
+  const [tgChatId, setTgChatId] = useState('')
+  const [tgTesting, setTgTesting] = useState(false)
+  const [tgResult, setTgResult] = useState(null)
+  const [tgSaved, setTgSaved] = useState(false)
+
   // Update input fields when config changes
   useEffect(() => {
     setHfTokenInput(config.hfToken || '')
     setMistralKeyInput(config.mistralApiKey || '')
   }, [config.hfToken, config.mistralApiKey])
+
+  // Load Gmail connection status
+  useEffect(() => {
+    const connected = isGmailConnected()
+    setGmailConnected(connected)
+    if (connected) {
+      const tokens = getGmailTokens()
+      setGmailEmail(tokens?.userEmail ?? null)
+    }
+  }, [])
+
+  // Load Telegram config
+  useEffect(() => {
+    async function loadTgConfig() {
+      // Try localStorage first (fast)
+      const cached = getTelegramConfig()
+      if (cached?.token) {
+        setTgToken(cached.token)
+        setTgChatId(cached.chatId || '')
+        return
+      }
+      // Fallback to Supabase
+      const dbCfg = await getTelegramConfigDb()
+      if (dbCfg?.token) {
+        setTgToken(dbCfg.token)
+        setTgChatId(dbCfg.chatId || '')
+      }
+    }
+    loadTgConfig()
+  }, [])
 
   // Test HuggingFace connection
   async function testHuggingFaceConnection() {
@@ -64,8 +117,8 @@ export default function SettingsPage() {
     setHfTestResult(null)
 
     try {
-      // Test with a simple model info request (doesn't require inference credits)
-      const response = await fetch('https://api-inference.huggingface.co/models/Poofy1/e621-tagger', {
+      // Test with whoami endpoint (lightweight, doesn't require inference)
+      const response = await fetch('https://huggingface.co/api/whoami', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${hfTokenInput}`
@@ -73,7 +126,11 @@ export default function SettingsPage() {
       })
 
       if (response.ok) {
-        setHfTestResult({ ok: true, message: '✅ Conexión exitosa con HuggingFace' })
+        const data = await response.json()
+        setHfTestResult({ 
+          ok: true, 
+          message: `✅ Token válido - Cuenta: ${data.name || 'Usuario'} (${data.type || 'user'})` 
+        })
       } else if (response.status === 401) {
         setHfTestResult({ ok: false, message: '❌ Token inválido o revocado' })
       } else if (response.status === 403) {
@@ -136,6 +193,31 @@ export default function SettingsPage() {
     setConfig('mistralApiKey', mistralKeyInput.trim())
     setMistralTestResult({ ok: true, message: '✅ API Key guardada correctamente' })
     setTimeout(() => setMistralTestResult(null), 3000)
+  }
+
+  // Gmail handlers
+  function handleDisconnectGmail() {
+    if (!confirm('¿Desconectar Google? Se eliminarán los tokens guardados.')) return
+    clearGmailTokens()
+    setGmailConnected(false)
+    setGmailEmail(null)
+  }
+
+  // Telegram handlers
+  function handleSaveTelegram() {
+    saveTelegramConfig(tgToken.trim(), tgChatId.trim())
+    setTgSaved(true)
+    setTgResult(null)
+    setTimeout(() => setTgSaved(false), 2500)
+  }
+
+  async function handleTestTelegram() {
+    if (!tgToken.trim() || !tgChatId.trim()) return
+    setTgTesting(true)
+    setTgResult(null)
+    const res = await testTelegramConnection(tgToken.trim(), tgChatId.trim())
+    setTgResult(res)
+    setTgTesting(false)
   }
 
   function readFile(file, onResult) {

@@ -95,16 +95,7 @@ export default function Sidebar({ active, onNavigate, mobileOpen, onMobileClose 
 
       {/* Connections + Additional pages */}
       <nav className="sidebar-nav sidebar-nav--placeholders" aria-label="Funciones adicionales">
-        {/* Connections */}
-        <button
-          className={`sidebar-item sidebar-item--connections ${active === 'connections' ? 'sidebar-item--active' : ''}`}
-          onClick={() => onNavigate('connections')}
-          aria-current={active === 'connections' ? 'page' : undefined}
-        >
-          <span className="sidebar-item-icon" aria-hidden="true">🔌</span>
-          <span className="sidebar-item-label">Conexiones</span>
-          <span className="sidebar-item-badge" aria-hidden="true">Nuevo</span>
-        </button>
+        {/* Connections button removed - now in Settings → Conexiones tab */}
 
         <button className={`sidebar-item ${active === 'media' ? 'sidebar-item--active' : ''}`} onClick={() => onNavigate('media')} aria-current={active === 'media' ? 'page' : undefined}>
           <span className="sidebar-item-icon" aria-hidden="true">💬</span>
