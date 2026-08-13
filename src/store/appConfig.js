@@ -44,6 +44,9 @@ const DEFAULTS = {
 
   // Mistral API key for NSFW-aware tag generation
   mistralApiKey: '',
+
+  // Mistral model selection
+  mistralModel: 'pixtral-large-latest',
 }
 
 let _config = { ...DEFAULTS }
@@ -82,6 +85,7 @@ function syncToSupabase() {
         section_icons: _config.sectionIcons,
         telegram_sticker_sets: _config.telegramStickerSets,
         mistral_api_key: _config.mistralApiKey,
+        mistral_model: _config.mistralModel,
       })
     } catch (e) {
       // Supabase not ready or offline — localStorage is the fallback

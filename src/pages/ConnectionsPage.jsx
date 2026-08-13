@@ -275,9 +275,27 @@ export default function ConnectionsPage() {
 
   // ── Mistral state ──
   const [mistralKey, setMistralKey]         = useState('')
+  const [mistralModel, setMistralModel]     = useState('pixtral-large-latest')
+  const [mistralCustomModel, setMistralCustomModel] = useState('')
   const [mistralSaved, setMistralSaved]     = useState(false)
   const [mistralTesting, setMistralTesting] = useState(false)
   const [mistralTestResult, setMistralTestResult] = useState(null)
+
+  const MISTRAL_MODELS = [
+    { value: 'mistral-small-latest',  label: 'Mistral Small (sin visión)',        vision: false },
+    { value: 'mistral-medium-latest', label: 'Mistral Medium (sin visión)',       vision: false },
+    { value: 'open-mistral-7b',       label: 'Open Mistral 7B — gratis, sin visión', vision: false },
+    { value: 'pixtral-12b-2409',      label: 'Pixtral 12B (visión, requiere plan)', vision: true },
+    { value: 'pixtral-large-latest',  label: 'Pixtral Large (visión NSFW, requiere plan)', vision: true },
+    { value: 'other',                 label: 'Otro (introducir manualmente)',     vision: null },
+  ]
+
+  // Derived: effective model value (handle "other")
+  const effectiveMistralModel = mistralModel === 'other'
+    ? mistralCustomModel.trim()
+    : mistralModel
+
+  const selectedModelDef = MISTRAL_MODELS.find(m => m.value === mistralModel)
 
   // ── Companion App state ──
   const [companionStatus, setCompanionStatus] = useState(null) // null | 'checking' | 'ok' | 'err'
@@ -316,23 +334,32 @@ export default function ConnectionsPage() {
   useEffect(() => {
     const cfg = getConfig()
     if (cfg.mistralApiKey) setMistralKey(cfg.mistralApiKey)
+    if (cfg.mistralModel) {
+      const known = ['mistral-small-latest', 'mistral-medium-latest', 'open-mistral-7b', 'pixtral-12b-2409', 'pixtral-large-latest']
+      if (known.includes(cfg.mistralModel)) {
+        setMistralModel(cfg.mistralModel)
+      } else {
+        setMistralModel('other')
+        setMistralCustomModel(cfg.mistralModel)
+      }
+    }
   }, [])
 
-  // ── Mistral handlers ──────────────────────────────────────────────────────
   function handleSaveMistral() {
     setConfig('mistralApiKey', mistralKey.trim())
+    setConfig('mistralModel', effectiveMistralModel || 'pixtral-large-latest')
     setMistralSaved(true)
     setMistralTestResult(null)
     setTimeout(() => setMistralSaved(false), 2500)
   }
 
   async function handleTestMistral() {
-    const key = mistralKey.trim() || getConfig().mistralApiKey
+    const key   = mistralKey.trim() || getConfig().mistralApiKey
+    const model = effectiveMistralModel || getConfig().mistralModel || 'pixtral-large-latest'
     if (!key) return
     setMistralTesting(true)
     setMistralTestResult(null)
     try {
-      // Test with a minimal chat completion — most reliable way to verify the key
       const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -340,13 +367,13 @@ export default function ConnectionsPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'pixtral-large-latest',
+          model,
           max_tokens: 5,
           messages: [{ role: 'user', content: 'hi' }],
         }),
       })
       if (res.ok) {
-        setMistralTestResult({ ok: true, msg: '✅ Pixtral Large conectado y listo para generar tags' })
+        setMistralTestResult({ ok: true, msg: `✅ Modelo "${model}" conectado y listo` })
       } else {
         const body = await res.json().catch(() => ({}))
         setMistralTestResult({ ok: false, msg: `❌ ${body?.message || `HTTP ${res.status}`}` })
@@ -659,6 +686,33 @@ export default function ConnectionsPage() {
                   placeholder="..."
                   autoComplete="off"
                 />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Modelo</label>
+                <select
+                  className="form-input"
+                  value={mistralModel}
+                  onChange={e => { setMistralModel(e.target.value); setMistralTestResult(null) }}
+                >
+                  {MISTRAL_MODELS.map(m => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+                {mistralModel === 'other' && (
+                  <input
+                    className="form-input"
+                    style={{ marginTop: '0.5rem' }}
+                    value={mistralCustomModel}
+                    onChange={e => setMistralCustomModel(e.target.value)}
+                    placeholder="ej. mistral-large-latest"
+                  />
+                )}
+                {selectedModelDef && selectedModelDef.vision === false && (
+                  <p className="conn-warn-note" style={{ marginTop: '0.4rem', color: '#f59e0b', fontSize: '0.8rem' }}>
+                    ⚠️ Este modelo no puede analizar imágenes — los tags no se generarán automáticamente.
+                  </p>
+                )}
               </div>
 
               <div className="conn-actions">

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loadPublications } from '../lib/publicationsDb.js'
 import { useTasks } from '../hooks/useTasks.js'
+import { supabase } from '../lib/supabase.js'
 
 /**
  * Formatea una fecha ISO-8601 a DD/MM/YYYY HH:mm en la zona horaria local del navegador.
@@ -37,6 +38,14 @@ export default function PublicationsPage() {
       setLoading(false)
     })
   }, [])
+
+  async function handleDelete(id) {
+    if (!window.confirm('¿Eliminar este registro de publicación?')) return
+    const { error } = await supabase.from('publications').delete().eq('id', id)
+    if (!error) {
+      setRecords(prev => prev.filter(r => r.id !== id))
+    }
+  }
 
   // Build a Set of existing taskIds for O(1) lookup
   const existingTaskIds = new Set(rawTasks.map(t => t.id))
@@ -91,12 +100,13 @@ export default function PublicationsPage() {
                       <img
                         src={rec.imageUrl}
                         alt={rec.taskName}
+                        style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, display: 'block' }}
                         onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }}
                       />
                     ) : null}
                     <div
                       className="pub-thumb-placeholder"
-                      style={{ display: rec.imageUrl ? 'none' : 'flex' }}
+                      style={{ display: rec.imageUrl ? 'none' : 'flex', width: 80, height: 80, borderRadius: 8 }}
                       aria-hidden="true"
                     >
                       🖼
@@ -127,16 +137,28 @@ export default function PublicationsPage() {
                     <p className="pub-date">📅 {formatDate(rec.sentAt)}</p>
                   </div>
 
-                  {/* Navigate button */}
-                  <button
-                    className="pub-goto-btn"
-                    disabled={!taskExists}
-                    title={taskExists ? 'Ver comisión en el tablero' : 'La comisión ya no existe en el tablero.'}
-                    onClick={() => taskExists && navigate('/studio')}
-                    aria-label={taskExists ? `Ver comisión ${rec.taskName} en el tablero` : 'La comisión ya no existe en el tablero'}
-                  >
-                    {taskExists ? '↗ Ver' : '—'}
-                  </button>
+                  {/* Navigate button + Delete button */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+                    <button
+                      className="pub-goto-btn"
+                      disabled={!taskExists}
+                      title={taskExists ? 'Ver comisión en el tablero' : 'La comisión ya no existe en el tablero.'}
+                      onClick={() => taskExists && navigate('/studio')}
+                      aria-label={taskExists ? `Ver comisión ${rec.taskName} en el tablero` : 'La comisión ya no existe en el tablero'}
+                      style={{ background: '#7c6af5', color: '#fff', border: 'none' }}
+                    >
+                      {taskExists ? '↗ Ver' : '—'}
+                    </button>
+                    <button
+                      className="pub-delete-btn"
+                      onClick={() => handleDelete(rec.id)}
+                      title="Eliminar este registro"
+                      aria-label={`Eliminar publicación ${rec.taskName}`}
+                      style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, padding: '0.3rem 0.6rem', cursor: 'pointer', fontSize: '0.8rem' }}
+                    >
+                      🗑 Eliminar
+                    </button>
+                  </div>
                 </div>
               )
             })}

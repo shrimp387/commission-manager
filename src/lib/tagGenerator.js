@@ -82,9 +82,16 @@ Rules:
  * @returns {Promise<string[]>} array de tags normalizados (máx. 200)
  * @throws {ConfigError} si falta la API Key de Mistral
  */
+// Models that support image/vision input
+const VISION_MODELS = new Set([
+  'pixtral-12b-2409',
+  'pixtral-large-latest',
+])
+
 export async function generateTags(imageUrl) {
   const cfg = getConfig()
   const mistralApiKey = cfg.mistralApiKey
+  const mistralModel  = cfg.mistralModel || 'pixtral-large-latest'
 
   console.debug('[tagGenerator] config keys:', Object.keys(cfg).filter(k => k.includes('mistral') || k.includes('api')))
 
@@ -94,7 +101,13 @@ export async function generateTags(imageUrl) {
     )
   }
 
-  console.debug(`[tagGenerator] mistral key=${mistralApiKey.slice(0, 4)}***, image=${imageUrl}`)
+  if (!VISION_MODELS.has(mistralModel)) {
+    throw new ConfigError(
+      `El modelo "${mistralModel}" no soporta análisis de imágenes. Cambia a Pixtral en Conexiones → Mistral AI.`
+    )
+  }
+
+  console.debug(`[tagGenerator] model=${mistralModel}, key=${mistralApiKey.slice(0, 4)}***, image=${imageUrl}`)
 
   const controller = new AbortController()
   const timerId = setTimeout(() => controller.abort(), TAG_TIMEOUT_MS)
@@ -108,7 +121,7 @@ export async function generateTags(imageUrl) {
         Authorization: `Bearer ${mistralApiKey}`,
       },
       body: JSON.stringify({
-        model: 'pixtral-large-latest',
+        model: mistralModel,
         max_tokens: 1000,
         messages: [
           {

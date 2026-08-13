@@ -2308,8 +2308,8 @@ a { color: var(--blue); }
   color: var(--text-dim);
 }
 .pub-submit-btn {
-  background: var(--green);
-  color: #000;
+  background: #7c6af5;
+  color: #fff;
   border: none;
   border-radius: 10px;
   padding: 0.9rem 1.5rem;
@@ -2363,8 +2363,8 @@ a { color: var(--blue); }
 }
 .pub-btn-back:hover { border-color: var(--green); color: var(--green); }
 .pub-btn-next {
-  background: var(--green);
-  color: #000;
+  background: #7c6af5;
+  color: #fff;
   border: none;
   border-radius: 8px;
   padding: 0.65rem 1.5rem;
