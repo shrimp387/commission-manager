@@ -31,7 +31,7 @@ function corsHeaders(origin) {
   const allowedOrigin = isAllowed ? origin : ALLOWED_ORIGINS[0]
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, PUT, DELETE, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
   }
@@ -338,6 +338,90 @@ export default {
         uploadId: e621Body.id,
         url: e621Body.post_id ? `https://e621.net/posts/${e621Body.post_id}` : null,
       }), {
+        status: 200, headers: { ...cors, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // ── WD-TAGGER PROXY ─────────────────────────────────────────────────────
+    // POST /tag
+    // Body JSON: { imageUrl: string, threshold?: number }
+    // Proxies to HuggingFace Inference API (no CORS issues, server-side).
+    // Requires auth.
+    if (request.method === 'POST' && pathname === '/tag') {
+      const userId = await getUserIdFromJWT(
+        request.headers.get('Authorization'),
+        env.SUPABASE_JWT_SECRET
+      )
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      let body
+      try {
+        body = await request.json()
+      } catch {
+        return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+          status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      const { imageUrl, threshold = 0.35 } = body
+      if (!imageUrl) {
+        return new Response(JSON.stringify({ error: 'imageUrl required' }), {
+          status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Download the image server-side
+      const imgRes = await fetch(imageUrl)
+      if (!imgRes.ok) {
+        return new Response(JSON.stringify({ error: `Failed to download image: HTTP ${imgRes.status}` }), {
+          status: 502, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+      const imgBuffer = await imgRes.arrayBuffer()
+      const contentType = imgRes.headers.get('content-type') || 'image/png'
+
+      // Call HuggingFace WD-Tagger
+      // Use token from env if available, otherwise use public access
+      const hfHeaders = { 'Content-Type': contentType }
+      if (env.HF_TOKEN) hfHeaders['Authorization'] = `Bearer ${env.HF_TOKEN}`
+
+      const hfRes = await fetch(
+        'https://api-inference.huggingface.co/models/SmilingWolf/wd-v1-4-swinv2-tagger-v2',
+        { method: 'POST', headers: hfHeaders, body: imgBuffer }
+      )
+
+      if (!hfRes.ok) {
+        const hfBody = await hfRes.json().catch(() => ({}))
+        // Model loading (cold start) — tell client to retry
+        if (hfRes.status === 503) {
+          return new Response(JSON.stringify({
+            error: 'model_loading',
+            estimated_time: hfBody.estimated_time ?? 20,
+            message: `WD-Tagger está cargando, intenta en ${Math.ceil(hfBody.estimated_time ?? 20)}s`
+          }), {
+            status: 503, headers: { ...cors, 'Content-Type': 'application/json' }
+          })
+        }
+        return new Response(JSON.stringify({ error: hfBody.error || `HF API HTTP ${hfRes.status}` }), {
+          status: 502, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+
+      // predictions: [{ label: string, score: number }]
+      const predictions = await hfRes.json()
+
+      const tags = predictions
+        .filter(p => p.score >= threshold)
+        .sort((a, b) => b.score - a.score)
+        .map(p => p.label.toLowerCase().replace(/\s+/g, '_'))
+        .filter(t => t.length > 0)
+        .slice(0, 200)
+
+      return new Response(JSON.stringify({ ok: true, tags }), {
         status: 200, headers: { ...cors, 'Content-Type': 'application/json' }
       })
     }

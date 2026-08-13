@@ -47,86 +47,63 @@ export function identifyHighResAttachment(attachments) {
   )
 }
 
-// ── WD-Tagger (HuggingFace Inference API) ────────────────────────────────────
-// Modelo: SmilingWolf/wd-v1-4-swinv2-tagger-v2
-// Especializado en arte anime/furry, sin censura NSFW.
-// API pública gratuita de HuggingFace (rate limit generoso).
+// ── WD-Tagger (via R2 Worker proxy) ──────────────────────────────────────────
+// El worker de Cloudflare actúa de proxy server-side a HuggingFace.
+// Evita CORS y el cold-start desde el navegador.
 
-const WD_TAGGER_URL = 'https://api-inference.huggingface.co/models/SmilingWolf/wd-v1-4-swinv2-tagger-v2'
-const WD_TIMEOUT_MS = 30_000
-// Umbral mínimo de confianza para incluir un tag (0-1)
-const WD_THRESHOLD = 0.35
+const R2_WORKER_URL = 'https://commission-manager-r2.commission-manager-studio.workers.dev'
+const WD_TIMEOUT_MS = 45_000  // HF puede tardar hasta 40s en cold start
+const WD_THRESHOLD  = 0.35
 
 /**
- * Descarga una imagen desde una URL y devuelve el blob.
- */
-async function fetchImageBlob(url) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), WD_TIMEOUT_MS)
-  try {
-    const res = await fetch(url, { signal: controller.signal })
-    clearTimeout(timer)
-    if (!res.ok) throw new Error(`Error al descargar imagen: HTTP ${res.status}`)
-    return await res.blob()
-  } catch (err) {
-    clearTimeout(timer)
-    if (err.name === 'AbortError') throw new Error('Timeout al descargar imagen para WD-Tagger')
-    throw err
-  }
-}
-
-/**
- * Genera tags con WD-Tagger vía HuggingFace Inference API.
- * No requiere API key (acceso público gratuito).
+ * Genera tags con WD-Tagger vía el proxy worker de Cloudflare.
+ * No requiere configuración del usuario — funciona out of the box.
  *
- * @param {string} imageUrl — URL pública de la imagen
+ * @param {string} imageUrl — URL pública de la imagen (en R2)
  * @returns {Promise<string[]>} array de tags normalizados
  */
 async function generateTagsWDTagger(imageUrl) {
-  // Descargamos la imagen primero porque HF Inference API acepta binary blob
-  const blob = await fetchImageBlob(imageUrl)
+  // Obtenemos el token de Supabase del localStorage para autenticar con el worker
+  let authToken = ''
+  try {
+    const session = JSON.parse(
+      localStorage.getItem('sb-yhlhsqhlnzgrhagoeosp-auth-token') || '{}'
+    )
+    authToken = session?.access_token || ''
+  } catch {}
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), WD_TIMEOUT_MS)
 
   try {
-    const res = await fetch(WD_TAGGER_URL, {
+    const res = await fetch(`${R2_WORKER_URL}/tag`, {
       method: 'POST',
       signal: controller.signal,
       headers: {
-        'Content-Type': blob.type || 'image/png',
-        // HuggingFace Inference API sin token funciona con rate limit generoso.
-        // Si el usuario tiene un HF token puede agregarlo en el futuro.
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       },
-      body: blob,
+      body: JSON.stringify({ imageUrl, threshold: WD_THRESHOLD }),
     })
 
     if (!res.ok) {
-      // El modelo puede estar cargando (503) — HF lo indica con loading message
       const body = await res.json().catch(() => ({}))
-      if (res.status === 503 && body?.estimated_time) {
-        throw new Error(`WD-Tagger está cargando (${Math.ceil(body.estimated_time)}s). Intenta de nuevo en un momento.`)
+      if (res.status === 503 && body.error === 'model_loading') {
+        throw new Error(body.message || 'WD-Tagger cargando, intenta en unos segundos')
       }
-      throw new Error(body?.error || `WD-Tagger HTTP ${res.status}`)
+      throw new Error(body.error || `Error del servidor: HTTP ${res.status}`)
     }
 
-    // Response: [{ label: string, score: number }, ...]
-    const predictions = await res.json()
-
-    if (!Array.isArray(predictions)) {
-      throw new Error('Respuesta inesperada de WD-Tagger')
+    const data = await res.json()
+    if (!data.ok || !Array.isArray(data.tags)) {
+      throw new Error('Respuesta inesperada del servidor de tags')
     }
 
-    return predictions
-      .filter(p => p.score >= WD_THRESHOLD)
-      .sort((a, b) => b.score - a.score)
-      .map(p => normalizeTag(p.label))
-      .filter(t => t.length > 0)
-      .slice(0, MAX_TAGS)
+    return data.tags
 
   } catch (err) {
     clearTimeout(timer)
-    if (err.name === 'AbortError') throw new Error('Timeout al generar tags con WD-Tagger')
+    if (err.name === 'AbortError') throw new Error('Timeout al generar tags (el modelo tardó demasiado). Intenta de nuevo.')
     throw err
   } finally {
     clearTimeout(timer)
