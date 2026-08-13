@@ -41,9 +41,7 @@ export function validatePublishInputs({ title, selectedAccounts, tags }) {
   if (!selectedAccounts || selectedAccounts.length === 0) {
     return { valid: false, message: 'Selecciona al menos una plataforma para publicar.' }
   }
-  if (!tags || tags.length === 0) {
-    return { valid: false, message: 'Agrega al menos un tag antes de publicar.' }
-  }
+  // Tags are optional - some platforms don't require them
   return { valid: true, message: '' }
 }
 
@@ -427,7 +425,7 @@ export default function PublishPanel({ taskId, task, fields, onClose }) {
   }
 
   // ── Derived ─────────────────────────────────────────────────────────────────
-  const canPublish = !sending && !acctsError && selected.length > 0 && title.trim() && tags.length > 0
+  const canPublish = !sending && !acctsError && selected.length > 0 && title.trim()
 
   const currentStepLabel = sendStep ? (STEPS.find(s => s.id === sendStep)?.label ?? '') : ''
 

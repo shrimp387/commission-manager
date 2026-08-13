@@ -30,12 +30,26 @@ CREATE TABLE IF NOT EXISTS publish_jobs (
 
 ALTER TABLE publish_jobs ENABLE ROW LEVEL SECURITY;
 
--- Users can only see, create and update their own jobs.
-CREATE POLICY "users_own_publish_jobs"
+-- Users can create and update their own jobs (requires auth)
+CREATE POLICY "users_can_manage_own_jobs"
   ON publish_jobs
   FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+-- Companion app can read ALL jobs (for processing)
+-- This allows the companion to poll without authentication
+CREATE POLICY "companion_can_read_all_jobs"
+  ON publish_jobs
+  FOR SELECT
+  USING (true);
+
+-- Companion app can update job status (for processing)
+CREATE POLICY "companion_can_update_status"
+  ON publish_jobs
+  FOR UPDATE
+  USING (status IN ('pending', 'running'))
+  WITH CHECK (status IN ('running', 'completed', 'partial', 'error'));
 
 -- ── Indexes ───────────────────────────────────────────────────────────────────
 
