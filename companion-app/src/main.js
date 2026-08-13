@@ -25,6 +25,12 @@ const store = new Store({
     supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlobGhzcWhsbnpncmhhZ29lb3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzMjEzMjIsImV4cCI6MjEwMTg5NzMyMn0.5OR7M62fNWnsPzNuyu06ub-joZusH9Ud9yeTcvp6dWc',
     supabaseUserId:  '', // filled automatically after Google login
     pollInterval: 5000,
+    
+    // IA tokens
+    hfToken: '',         // HuggingFace API token for taggers
+    mistralApiKey: '',   // Mistral AI API key
+    mistralModel: 'pixtral-large-latest',
+    
     platforms: {
       e621:        { username: '', apiKey: '',      enabled: false },
       inkbunny:    { username: '', password: '',    enabled: false, useBrowser: false },
@@ -258,6 +264,7 @@ function startPolling() {
 }
 
 const { generateTagsWDTagger } = require('./wdTagger')
+const { generateTagsE621, generateTagsPAWFECT } = require('./e621Tagger')
 
 // ── Tag requests polling ──────────────────────────────────────────────────────
 async function processTagRequests() {
@@ -296,14 +303,33 @@ async function processTagRequests() {
     if (!requests || requests.length === 0) return
 
     for (const req of requests) {
-      console.log(`[tagReq] processing request ${req.id} for image: ${req.image_url}`)
+      const taggerType = req.tagger_type || 'wd'
+      console.log(`[tagReq] processing request ${req.id} for image: ${req.image_url} (tagger: ${taggerType})`)
+      
       await supabase.from('tag_requests').update({ status: 'processing', updated_at: new Date().toISOString() }).eq('id', req.id)
+      
       try {
         const hfToken = store.get('hfToken') || ''
-        console.log(`[tagReq] calling WD-Tagger, hfToken: ${hfToken ? 'set' : 'not set'}`)
-        const tags = await generateTagsWDTagger(req.image_url, hfToken)
+        console.log(`[tagReq] calling ${taggerType.toUpperCase()}-Tagger, hfToken: ${hfToken ? 'set' : 'not set'}`)
+        
+        let tags
+        
+        // Route to appropriate tagger based on tagger_type
+        switch (taggerType) {
+          case 'e621':
+            tags = await generateTagsE621(req.image_url, hfToken)
+            break
+          case 'pawfect':
+            tags = await generateTagsPAWFECT(req.image_url, hfToken)
+            break
+          case 'wd':
+          default:
+            tags = await generateTagsWDTagger(req.image_url, hfToken)
+            break
+        }
+        
         await supabase.from('tag_requests').update({ status: 'done', tags, updated_at: new Date().toISOString() }).eq('id', req.id)
-        console.log(`[tagReq] ✅ Done ${req.id}: ${tags.length} tags`)
+        console.log(`[tagReq] ✅ Done ${req.id}: ${tags.length} tags (${taggerType})`)
       } catch (err) {
         console.error(`[tagReq] ❌ Error ${req.id}:`, err.message)
         await supabase.from('tag_requests').update({ status: 'error', error_msg: err.message, updated_at: new Date().toISOString() }).eq('id', req.id)

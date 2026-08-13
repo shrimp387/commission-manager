@@ -133,6 +133,14 @@ async function prefillForm() {
     setV('dc-webhook', dc.webhookUrl)
     setCb('dc-enabled', dc.enabled)
 
+    // IAs (HuggingFace + Mistral)
+    setV('hf-token', cfg.hfToken ?? '')
+    setV('mistral-key', cfg.mistralApiKey ?? '')
+    const modelSelect = document.getElementById('mistral-model')
+    if (modelSelect) {
+      modelSelect.value = cfg.mistralModel || 'pixtral-large-latest'
+    }
+
   } catch (err) {
     console.error('[settings] prefillForm error:', err)
   }
@@ -338,6 +346,28 @@ async function testPlatform(platform) {
   }
 }
 window.testPlatform = testPlatform
+
+// ── Save IAs configuration ────────────────────────────────────────────────────
+
+async function saveIAs() {
+  try {
+    const hfToken = v('hf-token')
+    const mistralKey = v('mistral-key')
+    const mistralModel = document.getElementById('mistral-model')?.value || 'pixtral-large-latest'
+
+    // Save to electron-store
+    await window.companion.saveConfig({
+      hfToken,
+      mistralApiKey: mistralKey,
+      mistralModel
+    })
+
+    showResult('ias', '✅ Configuración de IAs guardada correctamente', 'ok')
+  } catch (err) {
+    showResult('ias', `❌ Error al guardar: ${err.message}`, 'err')
+  }
+}
+window.saveIAs = saveIAs
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

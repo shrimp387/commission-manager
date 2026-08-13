@@ -544,6 +544,76 @@
     </div>
   </div>
 
+  <!-- ── IAs (HuggingFace + Mistral) ────────────────────────────────────── -->
+  <div class="section" id="sec-ias">
+    <div class="section-header" onclick="toggleSection('sec-ias')">
+      <span class="section-icon">🤖</span>
+      <span class="section-title">IAs & Taggers</span>
+      <span class="section-subtitle">Configuración de modelos de IA</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+      <!-- HuggingFace -->
+      <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:1.3rem">🤗</span>
+          <span style="font-weight:600;font-size:0.9rem">HuggingFace</span>
+        </div>
+        <p class="hint" style="margin-bottom:12px">
+          Requerido para los taggers E621, P.A.W.F.E.C.T y WD-Tagger. Sin token, HuggingFace limita las requests (rate limiting).
+          <br/>
+          <strong style="color:var(--green)">Es GRATIS:</strong> Obtén tu token en <a href="https://huggingface.co/settings/tokens" target="_blank" style="color:var(--accent);text-decoration:underline">huggingface.co/settings/tokens</a> (tipo: Read)
+        </p>
+        <div class="field">
+          <label for="hf-token">Token (empieza con hf_...)</label>
+          <input type="password" id="hf-token" placeholder="hf_..." autocomplete="off" style="font-family:monospace" />
+        </div>
+        <div style="background:var(--bg);border-radius:6px;padding:10px;margin-top:10px;font-size:0.75rem">
+          <p style="font-weight:600;margin-bottom:4px;color:var(--text-label)">📊 Límites:</p>
+          <ul style="margin:0;padding-left:18px;color:var(--text-dim)">
+            <li>Sin token: ~100 requests/día (rate limit agresivo)</li>
+            <li>Con token gratis: ~1,000 requests/día (~30,000/mes)</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Mistral AI -->
+      <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:1.3rem">🧠</span>
+          <span style="font-weight:600;font-size:0.9rem">Mistral AI</span>
+        </div>
+        <p class="hint" style="margin-bottom:12px">
+          Opcional. Usa Mistral Pixtral para generar tags con IA multimodal (mejor contexto NSFW).
+          <br/>
+          <strong style="color:var(--yellow)">Requiere pago:</strong> ~$0.15 por 1M tokens. Obtén tu API key en <a href="https://console.mistral.ai" target="_blank" style="color:var(--accent);text-decoration:underline">console.mistral.ai</a>
+        </p>
+        <div class="field">
+          <label for="mistral-key">API Key</label>
+          <input type="password" id="mistral-key" placeholder="Mistral API Key..." autocomplete="off" style="font-family:monospace" />
+        </div>
+        <div class="field" style="margin-top:10px">
+          <label for="mistral-model">Modelo</label>
+          <select id="mistral-model" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:0.85rem;font-family:inherit;width:100%">
+            <option value="pixtral-large-latest">Pixtral Large (recomendado)</option>
+            <option value="pixtral-12b-2409">Pixtral 12B</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Save button -->
+      <div class="btn-row" style="margin-top:16px">
+        <button class="btn-save" onclick="saveIAs()">💾 Guardar configuración de IAs</button>
+      </div>
+      <div id="result-ias" class="result" style="margin-top:8px"></div>
+
+      <!-- Info box -->
+      <div style="background:var(--bg-input);border-left:3px solid var(--green);border-radius:6px;padding:12px;margin-top:16px;font-size:0.8rem;color:var(--text-dim)">
+        <p style="margin:0"><strong style="color:var(--text)">💡 Recomendación:</strong> Configura al menos el token de HuggingFace (gratis) para evitar errores de rate limiting en los taggers.</p>
+      </div>
+    </div>
+  </div>
+
 </div><!-- /.app -->
 
 <script src="settings.js"></script>

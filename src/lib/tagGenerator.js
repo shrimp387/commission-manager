@@ -49,7 +49,7 @@ async function generateTagsWDTagger(imageUrl, onStatus) {
   // y guarda el resultado en Supabase.
   try {
     const { requestTagsFromCompanion } = await import('./tagRequestsDb.js')
-    return await requestTagsFromCompanion(imageUrl, onStatus)
+    return await requestTagsFromCompanion(imageUrl, 'wd', onStatus)
   } catch (err) {
     console.warn('[WD-Tagger] companion via Supabase falló:', err.message)
     // Timeout = companion no disponible o no respondió

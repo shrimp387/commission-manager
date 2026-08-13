@@ -213,85 +213,65 @@ function parsePredictions(predictions, threshold = THRESHOLD) {
 }
 
 /**
- * Generates tags using Poofy1/e621-tagger or fallback
+ * Generates tags using Poofy1/e621-tagger via companion app
+ * Uses Supabase tag_requests to avoid CORS and rate limiting
  * 
  * @param {string} imageUrl - URL of the image to tag
- * @param {string} hfToken - Optional HuggingFace API token
+ * @param {string} hfToken - Optional HuggingFace API token (used by companion app)
  * @param {Function} onStatus - Optional status callback
  * @returns {Promise<string[]>} - Array of tags
  */
 export async function generateTagsE621(imageUrl, hfToken = '', onStatus = null) {
-  console.log('[e621Tagger] 🎯 Starting E621-Tagger generation')
+  console.log('[e621Tagger] 🎯 Starting E621-Tagger generation via companion app')
   console.log('[e621Tagger] 🖼️ Image URL:', imageUrl)
   
-  onStatus?.('Descargando imagen...')
-  const { buffer } = await downloadImageForTagging(imageUrl)
-  
-  const errors = []
-  
-  for (const modelName of E621_MODELS.poofy) {
-    try {
-      console.log('[e621Tagger] 🔄 Trying model:', modelName)
-      onStatus?.(`Analizando con ${modelName.split('/')[1]}...`)
-      const predictions = await callHuggingFaceModel(modelName, buffer, hfToken)
-      const tags = parsePredictions(predictions)
-      
-      if (tags.length > 0) {
-        console.log(`[e621Tagger] ✅ Generated ${tags.length} tags with ${modelName}`)
-        console.log(`[e621Tagger] 🏷️ Tags:`, tags.slice(0, 10).join(', '), '...')
-        return tags
-      } else {
-        console.warn(`[e621Tagger] ⚠️ ${modelName} returned 0 tags`)
-      }
-    } catch (err) {
-      console.error(`[e621Tagger] ❌ ${modelName} failed:`, err.message)
-      errors.push(`${modelName}: ${err.message}`)
+  try {
+    const { requestTagsFromCompanion } = await import('./tagRequestsDb.js')
+    return await requestTagsFromCompanion(imageUrl, 'e621', onStatus)
+  } catch (err) {
+    console.error('[e621Tagger] ❌ Companion app failed:', err.message)
+    
+    // Provide helpful error message
+    if (err.message.includes('Timeout') || err.message.includes('Companion')) {
+      throw new Error(
+        'Para usar E621-Tagger, abre la Companion App en tu PC. ' +
+        'La app descarga la imagen y llama a HuggingFace sin restricciones de CORS. ' +
+        `(Error: ${err.message})`
+      )
     }
+    
+    throw err
   }
-  
-  const errorMsg = `E621-Tagger failed all models: ${errors.join(' | ')}`
-  console.error('[e621Tagger] ❌', errorMsg)
-  throw new Error(errorMsg)
 }
 
 /**
- * Generates tags using P.A.W.F.E.C.T-Alpha (FurAffinity trained)
+ * Generates tags using P.A.W.F.E.C.T-Alpha (FurAffinity trained) via companion app
+ * Uses Supabase tag_requests to avoid CORS and rate limiting
  * 
  * @param {string} imageUrl - URL of the image to tag
- * @param {string} hfToken - Optional HuggingFace API token
+ * @param {string} hfToken - Optional HuggingFace API token (used by companion app)
  * @param {Function} onStatus - Optional status callback
  * @returns {Promise<string[]>} - Array of tags
  */
 export async function generateTagsPAWFECT(imageUrl, hfToken = '', onStatus = null) {
-  console.log('[e621Tagger] 🎯 Starting P.A.W.F.E.C.T generation')
+  console.log('[e621Tagger] 🎯 Starting P.A.W.F.E.C.T generation via companion app')
   console.log('[e621Tagger] 🖼️ Image URL:', imageUrl)
   
-  onStatus?.('Descargando imagen...')
-  const { buffer } = await downloadImageForTagging(imageUrl)
-  
-  const errors = []
-  
-  for (const modelName of E621_MODELS.pawfect) {
-    try {
-      console.log('[e621Tagger] 🔄 Trying model:', modelName)
-      onStatus?.(`Analizando con ${modelName.split('/')[1]}...`)
-      const predictions = await callHuggingFaceModel(modelName, buffer, hfToken)
-      const tags = parsePredictions(predictions)
-      
-      if (tags.length > 0) {
-        console.log(`[e621Tagger] ✅ Generated ${tags.length} tags with ${modelName}`)
-        console.log(`[e621Tagger] 🏷️ Tags:`, tags.slice(0, 10).join(', '), '...')
-        return tags
-      } else {
-        console.warn(`[e621Tagger] ⚠️ ${modelName} returned 0 tags`)
-      }
-    } catch (err) {
-      console.error(`[e621Tagger] ❌ ${modelName} failed:`, err.message)
-      errors.push(`${modelName}: ${err.message}`)
+  try {
+    const { requestTagsFromCompanion } = await import('./tagRequestsDb.js')
+    return await requestTagsFromCompanion(imageUrl, 'pawfect', onStatus)
+  } catch (err) {
+    console.error('[e621Tagger] ❌ Companion app failed:', err.message)
+    
+    // Provide helpful error message
+    if (err.message.includes('Timeout') || err.message.includes('Companion')) {
+      throw new Error(
+        'Para usar P.A.W.F.E.C.T, abre la Companion App en tu PC. ' +
+        'La app descarga la imagen y llama a HuggingFace sin restricciones de CORS. ' +
+        `(Error: ${err.message})`
+      )
     }
+    
+    throw err
   }
-  
-  const errorMsg = `P.A.W.F.E.C.T failed all models: ${errors.join(' | ')}`
-  console.error('[e621Tagger] ❌', errorMsg)
-  throw new Error(errorMsg)
 }
