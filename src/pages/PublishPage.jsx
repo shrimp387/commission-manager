@@ -140,10 +140,11 @@ export default function PublishPage() {
   }
 
   // ── Auto-generate tags when entering step 2 ─────────────────────────────────
-  useEffect(() => {
-    if (step !== 2 || !highRes || tags.length > 0) return
-    generateTagsAuto()
-  }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
+  // DISABLED — User can manually add tags or click "Regenerar" button
+  // useEffect(() => {
+  //   if (step !== 2 || !highRes || tags.length > 0) return
+  //   generateTagsAuto()
+  // }, [step])
 
   async function generateTagsAuto() {
     setLoadingTags(true)
@@ -310,7 +311,9 @@ export default function PublishPage() {
                 <p className="pub-section-sub">
                   {loadingTags
                     ? 'Analizando imagen...'
-                    : `${tags.length} tags generados`}
+                    : tags.length > 0
+                    ? `${tags.length} tags`
+                    : 'Agrega tags manualmente o genera con IA'}
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -330,7 +333,7 @@ export default function PublishPage() {
                   onClick={generateTagsAuto}
                   disabled={loadingTags || !highRes}
                 >
-                  🔄 Regenerar
+                  {tags.length > 0 ? '🔄 Regenerar' : '✨ Generar con IA'}
                 </button>
               </div>
             </div>

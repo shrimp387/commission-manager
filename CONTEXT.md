@@ -31,10 +31,11 @@
 - Kanban board completo
 - Solicitudes de comisión (CommissionForm)
 - Subida de imágenes a R2
-- Companion app conectada a Inkbunny (publica via API, visibility=yes)
+- Companion app con browser automation para Inkbunny (Playwright)
 - Selector de modelo Mistral en ConnectionsPage
 - Thumbnails 80x80 en PublicationsPage + botón eliminar
 - Botones publicación en morado (#7c6af5)
+- Tags manuales (no bloquea en WD-Tagger)
 
 ### ❌ Bug activo: WD-Tagger no funciona
 **Problema**: La web app está en HTTPS (Vercel). Intentar llamar a `http://localhost:54322` desde HTTPS causa **Mixed Content block** — el browser lo bloquea aunque el usuario acepte el popup.
@@ -85,9 +86,10 @@ CREATE POLICY "users_own_tag_requests" ON tag_requests FOR ALL USING (auth.uid()
 | `src/lib/publishJobsDb.js` | Inserta/lee `publish_jobs` en Supabase |
 | `src/store/appConfig.js` | Config global (localStorage + Supabase) — incluye mistralModel, tagBackend |
 | `r2-worker/src/index.js` | CF Worker: R2 proxy, /tag endpoint (falla 530), e621 proxy |
-| `companion-app/src/main.js` | Electron main: polling jobs, tag server local (puerto 54322), OAuth |
-| `companion-app/src/wdTagger.js` | WD-Tagger client para Node.js (funciona desde PC, no desde browser) |
+| `companion-app/src/main.js` | Electron main: polling jobs, tag server local (puerto 54322), OAuth, processJob con browser automation |
 | `companion-app/src/platforms/inkbunny.js` | Publica en Inkbunny via API (visibility=yes, notify_followers=yes) |
+| `companion-app/src/platforms/inkbunnyBrowser.js` | **NUEVO:** Browser automation para Inkbunny con Playwright — abre Chrome, rellena todo, deja listo para submit |
+| `companion-app/src/jobRunner.js` | Detecta `useBrowser` flag y elige API o browser automation |
 
 ## Flujo de publicación (actual)
 1. Kanban → tarjeta `stage: Entregado` → botón "📢 Preparar publicación"
@@ -110,6 +112,6 @@ CREATE POLICY "users_own_tag_requests" ON tag_requests FOR ALL USING (auth.uid()
 - Polling Supabase cada 5s para publish_jobs
 
 ## Próximos pasos recomendados
-1. **Fix WD-Tagger via Supabase tag_requests table** — la única solución que funciona sin Mixed Content ni CF 530
-2. Recompilar companion con soporte para polling tag_requests
-3. La web escucha con Supabase Realtime en tag_requests para recibir tags
+1. **Instalar Playwright browsers:** `cd companion-app ; npx playwright install chromium` (necesario para browser automation)
+2. **Recompilar companion app:** `cd companion-app ; npm run build` (versión 2.0.0)
+3. **Fix WD-Tagger via Supabase tag_requests table** — si quieres auto-generación de tags (opcional)

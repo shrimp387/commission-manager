@@ -27,7 +27,7 @@ const store = new Store({
     pollInterval: 5000,
     platforms: {
       e621:        { username: '', apiKey: '',      enabled: false },
-      inkbunny:    { username: '', password: '',    enabled: false },
+      inkbunny:    { username: '', password: '',    enabled: false, useBrowser: true },
       weasyl:      { apiKey: '',                   enabled: false },
       bluesky:     { handle: '', appPassword: '',  enabled: false },
       telegram:    { botToken: '', chatId: '',      enabled: false },
@@ -337,9 +337,12 @@ async function processJob(job) {
 
   for (const platform of (job.platforms || [])) {
     try {
+      console.log(`[job] 📤 Publishing to ${platform}...`)
       const result = await jobRunner.publishToPlatform(platform, jobWithTags)
+      console.log(`[job] ✅ ${platform} success:`, result)
       results.push({ platform, ok: true, url: result?.url })
     } catch (err) {
+      console.error(`[job] ❌ ${platform} failed:`, err.message, err.stack)
       errors.push({ platform, error: err.message })
     }
   }

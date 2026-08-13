@@ -1,6 +1,6 @@
 {
   "name": "commission-manager-companion",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Companion app for Commission Manager — publishes artwork to multiple platforms",
   "main": "src/main.js",
   "scripts": {
@@ -16,7 +16,8 @@
     "@supabase/supabase-js": "^2.45.0",
     "dotenv": "^16.4.0",
     "electron-store": "^8.2.0",
-    "form-data": "^4.0.0"
+    "form-data": "^4.0.0",
+    "playwright": "^1.62.1"
   },
   "devDependencies": {
     "electron": "^31.0.0",
@@ -30,7 +31,14 @@
       "output": "dist"
     },
     "win": {
-      "target": [{ "target": "dir", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "electronDist": null
   }

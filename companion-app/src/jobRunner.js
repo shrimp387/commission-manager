@@ -8,6 +8,7 @@
 
 const { publishE621 }     = require('./platforms/e621')
 const { publishInkbunny } = require('./platforms/inkbunny')
+const { publishInkbunnyBrowser } = require('./platforms/inkbunnyBrowser')
 const { publishWeasyl }   = require('./platforms/weasyl')
 const { publishBluesky }  = require('./platforms/bluesky')
 const { publishTelegram } = require('./platforms/telegram')
@@ -34,6 +35,10 @@ class JobRunner {
       case 'e621':
         return publishE621(job, credentials)
       case 'inkbunny':
+        // Use browser automation if useBrowser is enabled, otherwise use API
+        if (credentials.useBrowser) {
+          return publishInkbunnyBrowser(job, credentials)
+        }
         return publishInkbunny(job, credentials)
       case 'weasyl':
         return publishWeasyl(job, credentials)
@@ -59,6 +64,11 @@ class JobRunner {
       }
       case 'inkbunny': {
         const { testInkbunny } = require('./platforms/inkbunny')
+        const { testInkbunnyBrowser } = require('./platforms/inkbunnyBrowser')
+        // Use browser test if useBrowser is enabled
+        if (credentials.useBrowser) {
+          return testInkbunnyBrowser(credentials)
+        }
         return testInkbunny(credentials)
       }
       case 'weasyl': {

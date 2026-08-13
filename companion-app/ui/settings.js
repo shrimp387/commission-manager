@@ -44,6 +44,7 @@ function buildConfig() {
     'platforms.inkbunny.username': v('ib-user'),
     'platforms.inkbunny.password': v('ib-pass'),
     'platforms.inkbunny.enabled':  cb('ib-enabled'),
+    'platforms.inkbunny.useBrowser': cb('ib-useBrowser'),
 
     // Weasyl
     'platforms.weasyl.apiKey':  v('weasyl-key'),
@@ -110,6 +111,7 @@ async function prefillForm() {
     setV('ib-user', ib.username)
     setV('ib-pass', ib.password)
     setCb('ib-enabled', ib.enabled)
+    setCb('ib-useBrowser', ib.useBrowser)
 
     // Weasyl
     const weasyl = cfg.platforms?.weasyl ?? {}
@@ -260,7 +262,7 @@ function buildCredentials(platform) {
     case 'e621':
       return { username: v('e621-user'), apiKey: v('e621-key') }
     case 'inkbunny':
-      return { username: v('ib-user'), password: v('ib-pass') }
+      return { username: v('ib-user'), password: v('ib-pass'), useBrowser: cb('ib-useBrowser') }
     case 'weasyl':
       return { apiKey: v('weasyl-key') }
     case 'bluesky':
