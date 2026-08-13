@@ -27,20 +27,26 @@ const E621_MODELS = {
 
 /**
  * Downloads image as buffer for processing
- * Uses cache-busting and fallback to handle CORS issues
+ * Uses aggressive cache-busting and fallback to handle CORS issues
  */
 async function downloadImageForTagging(imageUrl) {
   console.log('[e621Tagger] 📥 Downloading image:', imageUrl)
   
   try {
     // Add cache-busting parameter to force fresh request (avoids cached CORS errors)
-    const cacheBustUrl = imageUrl + (imageUrl.includes('?') ? '&' : '?') + `_cb=${Date.now()}`
+    // Use random value in addition to timestamp for extra cache-busting
+    const cacheBustUrl = imageUrl + (imageUrl.includes('?') ? '&' : '?') + `_cb=${Date.now()}&_r=${Math.random()}`
     console.log('[e621Tagger] 🔄 Attempting direct download with cache-busting...')
     
     const res = await fetch(cacheBustUrl, {
       mode: 'cors',
       credentials: 'omit',
       cache: 'no-store', // Don't cache this request
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     })
     
     console.log('[e621Tagger] 📡 Response status:', res.status, res.statusText)
@@ -79,8 +85,8 @@ async function downloadImageForTagging(imageUrl) {
         setTimeout(() => reject(new Error('Image load timeout (30s)')), 30000)
       })
       
-      // Load image with cache-busting
-      img.src = imageUrl + (imageUrl.includes('?') ? '&' : '?') + `_cb=${Date.now()}`
+      // Load image with cache-busting (both timestamp and random for aggressive cache invalidation)
+      img.src = imageUrl + (imageUrl.includes('?') ? '&' : '?') + `_cb=${Date.now()}&_r=${Math.random()}`
       await loadPromise
       
       console.log('[e621Tagger] ✅ Image loaded via <img> element:', img.naturalWidth, 'x', img.naturalHeight)

@@ -193,10 +193,15 @@ export default function PublishPage() {
       } else if (err.message.includes('failed all models') || err.message.includes('Failed to fetch')) {
         // HuggingFace rate limit or network error
         setTagsError(
-          `⚠️ Error de HuggingFace: Los modelos no están respondiendo. ` +
-          `Posibles causas: rate limit (sin API token), modelos caídos, o problemas de red. ` +
-          `💡 Solución: Obtén un HuggingFace API token gratis en https://huggingface.co/settings/tokens ` +
-          `y configúralo en Conexiones → HuggingFace Token.`
+          `⚠️ Error al generar tags: Los modelos de HuggingFace no están respondiendo.\n\n` +
+          `🔍 Causas posibles:\n` +
+          `• Rate limiting de HuggingFace (sin API token)\n` +
+          `• Problemas de red o modelos caídos\n\n` +
+          `💡 Solución recomendada:\n` +
+          `1. Ve a Configuración → 🔌 Conexiones\n` +
+          `2. Configura tu HuggingFace token (es GRATIS)\n` +
+          `3. Obtén el token en: https://huggingface.co/settings/tokens\n\n` +
+          `Esto elimina los límites de rate limiting y prioriza tus requests.`
         )
       } else {
         setTagsError(`Error: ${err.message}`)
@@ -405,7 +410,7 @@ export default function PublishPage() {
             )}
 
             {tagsError && (
-              <div className="pub-warn-box">
+              <div className="pub-warn-box" style={{ whiteSpace: 'pre-line' }}>
                 <span>⚠️</span>
                 <span>{tagsError}</span>
               </div>

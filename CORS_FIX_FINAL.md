@@ -2,8 +2,10 @@
 
 ## ✅ Cambios Aplicados
 
-### 1. **Cache-Busting Automático**
-- Agrega `?_cb=timestamp` a cada request
+### 1. **Cache-Busting Agresivo**
+- Agrega `?_cb=timestamp&_r=random` a cada request
+- Combina timestamp + número aleatorio para invalidar cache agresivamente
+- Headers adicionales: `Cache-Control: no-cache`, `Pragma: no-cache`, `Expires: 0`
 - Evita que el navegador use respuestas cacheadas sin CORS
 - Fuerza a R2 a enviar headers CORS frescos
 
@@ -15,8 +17,17 @@
 
 ### 3. **Mensajes de Error Mejorados**
 - Detecta errores de CORS específicamente
-- Muestra instrucciones claras al usuario
-- Sugiere esperar 5 minutos y usar modo incógnito
+- Detecta errores de rate limiting de HuggingFace
+- Muestra instrucciones claras al usuario con pasos numerados
+- Sugiere configurar HuggingFace token (gratis)
+- Incluye enlaces directos a la configuración
+
+### 4. **UI para Configurar Tokens**
+- Nueva pestaña "🔌 Conexiones" en Configuración
+- Campo para HuggingFace API token (con ayuda inline)
+- Campo para Mistral API key (opcional)
+- Selector de modelo Mistral
+- Links directos a las páginas de generación de tokens
 
 ---
 
@@ -134,7 +145,20 @@ Tu configuración actual es **correcta**:
 
 ## 🐛 Troubleshooting
 
-### **Problema: Sigue fallando en Escenario 3**
+### **Problema: Sigue fallando con "Failed to fetch" en todos los modelos**
+
+**Causa:** Rate limiting de HuggingFace (sin token de autenticación)
+
+**Solución:**
+```
+1. Ve a Configuración → 🔌 Conexiones en tu app
+2. Obtén un token GRATIS en https://huggingface.co/settings/tokens
+3. Crea un token tipo "Read" llamado "Commission Manager"
+4. Cópialo y pégalo en el campo "HuggingFace API Token"
+5. Guarda y prueba de nuevo
+```
+
+### **Problema: Sigue fallando en Escenario 3 (ambos métodos fallan)**
 
 **Causa:** Cache muy agresivo del navegador
 
@@ -143,7 +167,8 @@ Tu configuración actual es **correcta**:
 1. Cierra TODAS las pestañas de tu app
 2. Ctrl+Shift+Delete → Borrar cache e imágenes (última hora)
 3. Ctrl+Shift+N → Modo incógnito
-4. Prueba de nuevo
+4. Configura el token de HuggingFace si aún no lo has hecho
+5. Prueba de nuevo
 ```
 
 ### **Problema: Canvas fallback muy lento**
@@ -153,6 +178,7 @@ Tu configuración actual es **correcta**:
 **Solución:** 
 - Espera 5-10 minutos para que CORS se propague
 - Después usará directo (Escenario 1), que es mucho más rápido
+- Considera configurar el token de HuggingFace para mejor rendimiento
 
 ---
 

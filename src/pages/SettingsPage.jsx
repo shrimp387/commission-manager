@@ -105,6 +105,7 @@ export default function SettingsPage() {
             { id: 'background', label: '🖼 Fondo' },
             { id: 'typography', label: 'Aa Tipografía' },
             { id: 'pageBgs', label: '🖼 Fondos de página' },
+            { id: 'connections', label: '🔌 Conexiones' },
             { id: 'storage', label: '🗄 Storage' },
           ].map(t => (
             <button key={t.id} className={`tab-btn ${tab === t.id ? 'tab-btn--active' : ''}`}
@@ -346,6 +347,122 @@ export default function SettingsPage() {
             }}
             onClose={() => setBgEditorPage(null)}
           />
+        )}
+
+        {/* CONNECTIONS TAB — API keys y tokens */}
+        {tab === 'connections' && (
+          <div className="settings-section">
+            <h2 className="settings-h2">🔌 Conexiones API</h2>
+            <p className="settings-desc">Configura los tokens y API keys para servicios externos.</p>
+
+            {/* HuggingFace Token */}
+            <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <span style={{ fontSize: '1.5rem' }}>🤗</span>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>HuggingFace API Token</h3>
+              </div>
+              
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                Requerido para los taggers E621 y P.A.W.F.E.C.T. Sin token, HuggingFace limita las requests (rate limiting).
+                <br />
+                <strong>Es GRATIS:</strong> Obtén tu token en{' '}
+                <a 
+                  href="https://huggingface.co/settings/tokens" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--green)', textDecoration: 'underline' }}
+                >
+                  huggingface.co/settings/tokens
+                </a>
+                {' '}(tipo: Read)
+              </p>
+
+              <div className="settings-row">
+                <label className="settings-label">Token (empieza con hf_...)</label>
+                <input 
+                  className="form-input"
+                  type="password"
+                  value={config.hfToken || ''}
+                  onChange={e => setConfig('hfToken', e.target.value.trim())}
+                  placeholder="hf_..."
+                  style={{ fontFamily: 'monospace' }}
+                />
+                {config.hfToken && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--green)', marginTop: '0.5rem' }}>
+                    ✅ Token configurado ({config.hfToken.length} caracteres)
+                  </p>
+                )}
+              </div>
+
+              <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius-sm)', padding: '0.75rem', marginTop: '1rem', fontSize: '0.8rem' }}>
+                <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>📊 Límites:</p>
+                <ul style={{ margin: 0, paddingLeft: '1.5rem', color: 'var(--text-muted)' }}>
+                  <li>Sin token: ~100 requests/día (rate limit agresivo)</li>
+                  <li>Con token gratis: ~1,000 requests/día (~30,000/mes)</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Mistral API Key */}
+            <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <span style={{ fontSize: '1.5rem' }}>🧠</span>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Mistral AI</h3>
+              </div>
+              
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                Opcional. Usa Mistral Pixtral para generar tags con IA multimodal (mejor contexto NSFW).
+                <br />
+                <strong>Requiere pago:</strong> ~$0.15 por 1M tokens. Obtén tu API key en{' '}
+                <a 
+                  href="https://console.mistral.ai" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--green)', textDecoration: 'underline' }}
+                >
+                  console.mistral.ai
+                </a>
+              </p>
+
+              <div className="settings-row">
+                <label className="settings-label">API Key</label>
+                <input 
+                  className="form-input"
+                  type="password"
+                  value={config.mistralApiKey || ''}
+                  onChange={e => setConfig('mistralApiKey', e.target.value.trim())}
+                  placeholder="Mistral API Key..."
+                  style={{ fontFamily: 'monospace' }}
+                />
+                {config.mistralApiKey && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--green)', marginTop: '0.5rem' }}>
+                    ✅ API Key configurada
+                  </p>
+                )}
+              </div>
+
+              {config.mistralApiKey && (
+                <div className="settings-row" style={{ marginTop: '1rem' }}>
+                  <label className="settings-label">Modelo</label>
+                  <select 
+                    className="form-input"
+                    value={config.mistralModel || 'pixtral-large-latest'}
+                    onChange={e => setConfig('mistralModel', e.target.value)}
+                  >
+                    <option value="pixtral-large-latest">Pixtral Large (recomendado)</option>
+                    <option value="pixtral-12b-2409">Pixtral 12B</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Info box */}
+            <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-md)', padding: '1rem', borderLeft: '3px solid var(--green)' }}>
+              <p style={{ fontSize: '0.85rem', margin: 0 }}>
+                <strong>💡 Recomendación:</strong> Configura al menos el token de HuggingFace (gratis) para evitar errores de rate limiting en los taggers.
+              </p>
+            </div>
+          </div>
         )}
 
         {/* STORAGE TAB — monitor de Supabase, R2, localStorage */}
