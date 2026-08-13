@@ -86,16 +86,24 @@ async function generateTagsWDTagger(imageUrl) {
       body: JSON.stringify({ imageUrl, threshold: WD_THRESHOLD }),
     })
 
+    console.debug('[WD-Tagger] status:', res.status, res.statusText)
+
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
+      console.error('[WD-Tagger] error body:', body)
       if (res.status === 503 && body.error === 'model_loading') {
         throw new Error(body.message || 'WD-Tagger cargando, intenta en unos segundos')
+      }
+      if (res.status === 401) {
+        throw new Error('No autorizado con el worker (token expirado). Recarga la página e intenta de nuevo.')
       }
       throw new Error(body.error || `Error del servidor: HTTP ${res.status}`)
     }
 
     const data = await res.json()
+    console.debug('[WD-Tagger] tags recibidos:', data.tags?.length ?? 0)
     if (!data.ok || !Array.isArray(data.tags)) {
+      console.error('[WD-Tagger] respuesta inesperada:', data)
       throw new Error('Respuesta inesperada del servidor de tags')
     }
 
@@ -103,6 +111,7 @@ async function generateTagsWDTagger(imageUrl) {
 
   } catch (err) {
     clearTimeout(timer)
+    console.error('[WD-Tagger] catch:', err.name, err.message)
     if (err.name === 'AbortError') throw new Error('Timeout al generar tags (el modelo tardó demasiado). Intenta de nuevo.')
     throw err
   } finally {

@@ -151,10 +151,12 @@ export default function PublishPage() {
       const generated = await generateTags(highRes.url, tagBackend)
       setTags(generated)
     } catch (err) {
+      console.error('[PublishPage] generateTagsAuto error:', err)
       if (err instanceof ConfigError) {
         setTagsError(err.message)
       } else {
-        setTagsError('No se pudieron generar tags. Puedes agregarlos manualmente.')
+        // Show the real error message so we can debug
+        setTagsError(`Error: ${err.message}`)
       }
     } finally {
       setLoadingTags(false)
