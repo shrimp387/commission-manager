@@ -57,16 +57,35 @@ let isRunning = false
 app.whenReady().then(async () => {
   app.setAppUserModelId('Commission Manager Companion')
 
+  console.log('\n╔═══════════════════════════════════════════════════════════╗')
+  console.log('║  COMMISSION MANAGER COMPANION v1.8.0 - STARTING UP...   ║')
+  console.log('╚═══════════════════════════════════════════════════════════╝\n')
+
   createTray()
   initSupabase()
   startOAuthCallback()   // listen for Google OAuth redirect
   startTagServer()       // local WD-Tagger endpoint for web app
+
+  // ── HuggingFace Health Check ────────────────────────────────────────
+  const { testHuggingFaceConnection, printHealthCheckSummary } = require('./hfHealthCheck')
+  const hfToken = store.get('hfToken') || ''
+  const hfStatus = await testHuggingFaceConnection(hfToken)
+  printHealthCheckSummary(hfStatus)
+
+  // ── Start Polling ───────────────────────────────────────────────────
   startPolling()
 
   // Open settings on first run if user has not logged in yet
   if (!store.get('supabaseUserId')) {
+    console.log('[startup] 👤 No hay sesión de usuario - abriendo Settings...\n')
     openSettings()
+  } else {
+    console.log('[startup] ✅ Usuario autenticado:', store.get('supabaseUserId').slice(0, 8) + '...\n')
   }
+
+  console.log('╔═══════════════════════════════════════════════════════════╗')
+  console.log('║        COMPANION APP LISTA - POLLING ACTIVO              ║')
+  console.log('╚═══════════════════════════════════════════════════════════╝\n')
 })
 
 app.on('window-all-closed', () => {
@@ -269,17 +288,11 @@ const { generateTagsE621, generateTagsPAWFECT } = require('./e621Tagger')
 // ── Tag requests polling ──────────────────────────────────────────────────────
 async function processTagRequests() {
   if (!supabase || !store.get('supabaseUserId')) {
-    console.log('[tagReq] skipped — no supabase or userId')
+    // console.log('[tagReq] skipped — no supabase or userId') // SILENCED - demasiado spam
     return
   }
   try {
     const userId = store.get('supabaseUserId')
-    // console.log(`[tagReq] polling for userId: ${userId}`) // SILENCED
-
-    // Check if we have an authenticated session
-    const { data: sessionData } = await supabase.auth.getSession()
-    const hasSession = !!sessionData?.session?.access_token
-    // console.log(`[tagReq] has auth session: ${hasSession}`) // SILENCED
 
     const { data: requests, error } = await supabase
       .from('tag_requests')
@@ -290,53 +303,147 @@ async function processTagRequests() {
       .limit(3)
 
     if (error) {
-      console.error('[tagReq] SELECT error:', error.message, error.code)
+      console.error('[tagReq] ❌ SELECT error:', error.message, error.code)
       return
     }
 
-    // Only log if we found requests
-    if (requests && requests.length > 0) {
-      console.log(`[tagReq] found ${requests.length} pending requests`)
-    }
-    // else: Stay silent when no requests
-    
     if (!requests || requests.length === 0) return
+
+    // ── Log de requests encontrados ────────────────────────────────────
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log(`[tagReq] 📬 ENCONTRADOS ${requests.length} TAG REQUESTS PENDIENTES`)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    requests.forEach((req, i) => {
+      const shortId = req.id.slice(0, 8)
+      const shortUrl = req.image_url.slice(0, 60)
+      console.log(`[tagReq]   ${i+1}. ID: ${shortId}... | Tagger: ${req.tagger_type?.toUpperCase() || 'WD'} | Imagen: ${shortUrl}...`)
+    })
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
 
     for (const req of requests) {
       const taggerType = req.tagger_type || 'wd'
-      console.log(`[tagReq] processing request ${req.id} for image: ${req.image_url} (tagger: ${taggerType})`)
       
-      await supabase.from('tag_requests').update({ status: 'processing', updated_at: new Date().toISOString() }).eq('id', req.id)
+      // ── Log inicio de procesamiento ──────────────────────────────────
+      console.log('╔═══════════════════════════════════════════════════════════╗')
+      console.log(`║  PROCESANDO REQUEST: ${req.id.slice(0, 20)}...  ║`)
+      console.log('╚═══════════════════════════════════════════════════════════╝')
+      console.log(`[tagReq] 🤖 Tagger: ${taggerType.toUpperCase()}`)
+      console.log(`[tagReq] 🖼️  Imagen: ${req.image_url}`)
+      console.log(`[tagReq] 👤 User: ${userId.slice(0, 8)}...`)
+      
+      const hfToken = store.get('hfToken') || ''
+      if (hfToken) {
+        console.log(`[tagReq] 🔑 HF Token: ${hfToken.slice(0, 10)}... (CONFIGURADO)`)
+      } else {
+        console.log(`[tagReq] ⚠️  HF Token: NO CONFIGURADO (rate limiting activo)`)
+      }
+      console.log('─────────────────────────────────────────────────────────────')
+      
+      // Marcar como processing
+      console.log(`[tagReq] 📝 Actualizando status → 'processing' en Supabase...`)
+      await supabase.from('tag_requests').update({ 
+        status: 'processing', 
+        updated_at: new Date().toISOString() 
+      }).eq('id', req.id)
+      console.log(`[tagReq] ✅ Status actualizado`)
       
       try {
-        const hfToken = store.get('hfToken') || ''
-        console.log(`[tagReq] calling ${taggerType.toUpperCase()}-Tagger, hfToken: ${hfToken ? 'set' : 'not set'}`)
+        console.log(`[tagReq] 🚀 Llamando a ${taggerType.toUpperCase()}-Tagger...\n`)
         
         let tags
+        const startTime = Date.now()
         
         // Route to appropriate tagger based on tagger_type
         switch (taggerType) {
           case 'e621':
+            console.log('[tagReq] 🤖 → Usando E621-Tagger (HuggingFace: Poofy1/e621-tagger)')
             tags = await generateTagsE621(req.image_url, hfToken)
             break
           case 'pawfect':
+            console.log('[tagReq] 🤖 → Usando P.A.W.F.E.C.T (HuggingFace: lodestones/P.A.W.F.E.C.T-Alpha)')
             tags = await generateTagsPAWFECT(req.image_url, hfToken)
             break
           case 'wd':
           default:
+            console.log('[tagReq] 🤖 → Usando WD-Tagger (HuggingFace: SmilingWolf/wd-vit-tagger-v3)')
             tags = await generateTagsWDTagger(req.image_url, hfToken)
             break
         }
         
-        await supabase.from('tag_requests').update({ status: 'done', tags, updated_at: new Date().toISOString() }).eq('id', req.id)
-        console.log(`[tagReq] ✅ Done ${req.id}: ${tags.length} tags (${taggerType})`)
+        const duration = Date.now() - startTime
+        
+        // ── Log de éxito ──────────────────────────────────────────────
+        console.log('\n─────────────────────────────────────────────────────────────')
+        console.log(`[tagReq] ✅ ${taggerType.toUpperCase()}-Tagger COMPLETADO`)
+        console.log(`[tagReq] ⏱️  Tiempo total: ${(duration / 1000).toFixed(2)}s`)
+        console.log(`[tagReq] 📊 Tags generados: ${tags.length}`)
+        console.log(`[tagReq] 🏷️  Muestra (primeros 10):`)
+        tags.slice(0, 10).forEach((tag, i) => {
+          console.log(`[tagReq]      ${i+1}. ${tag}`)
+        })
+        if (tags.length > 10) {
+          console.log(`[tagReq]      ... y ${tags.length - 10} más`)
+        }
+        console.log('─────────────────────────────────────────────────────────────')
+        
+        // Guardar en Supabase
+        console.log(`[tagReq] 💾 Guardando ${tags.length} tags en Supabase...`)
+        await supabase.from('tag_requests').update({ 
+          status: 'done', 
+          tags, 
+          updated_at: new Date().toISOString() 
+        }).eq('id', req.id)
+        console.log(`[tagReq] ✅ Tags guardados en Supabase`)
+        
+        console.log('╔═══════════════════════════════════════════════════════════╗')
+        console.log(`║         REQUEST ${req.id.slice(0, 8)}... COMPLETADO ✅         ║`)
+        console.log('╚═══════════════════════════════════════════════════════════╝\n')
+        
       } catch (err) {
-        console.error(`[tagReq] ❌ Error ${req.id}:`, err.message)
-        await supabase.from('tag_requests').update({ status: 'error', error_msg: err.message, updated_at: new Date().toISOString() }).eq('id', req.id)
+        // ── Log de error ──────────────────────────────────────────────
+        console.error('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        console.error(`[tagReq] ❌ ERROR EN REQUEST ${req.id.slice(0, 8)}...`)
+        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        console.error(`[tagReq] 🤖 Tagger: ${taggerType.toUpperCase()}`)
+        console.error(`[tagReq] 🖼️  Imagen: ${req.image_url}`)
+        console.error(`[tagReq] 🔍 Error type: ${err.name || 'Error'}`)
+        console.error(`[tagReq] 💬 Mensaje: ${err.message}`)
+        
+        // Diagnóstico de error común
+        if (err.message.includes('401') || err.message.includes('unauthorized')) {
+          console.error(`[tagReq] 🚫 CAUSA: Token HF inválido`)
+          console.error(`[tagReq] 🔧 SOLUCIÓN: Ve a Settings → IAs & Taggers → actualiza token`)
+        } else if (err.message.includes('429') || err.message.includes('rate limit')) {
+          console.error(`[tagReq] ⚠️  CAUSA: Rate limit excedido`)
+          console.error(`[tagReq] 🔧 SOLUCIÓN: Configura un token HF o espera unas horas`)
+        } else if (err.message.includes('timeout')) {
+          console.error(`[tagReq] ⏱️  CAUSA: Timeout - la request tardó demasiado`)
+          console.error(`[tagReq] 🔧 SOLUCIÓN: Reintenta - el modelo puede estar en cold start`)
+        } else if (err.message.includes('404') || err.message.includes('Not Found')) {
+          console.error(`[tagReq] 🔍 CAUSA: Imagen no encontrada o URL inválida`)
+          console.error(`[tagReq] 🔧 SOLUCIÓN: Verifica que la URL de la imagen sea accesible`)
+        }
+        
+        console.error(`[tagReq] 📚 Stack trace:`)
+        console.error(err.stack)
+        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        
+        // Guardar error en Supabase
+        console.log(`[tagReq] 💾 Guardando error en Supabase...`)
+        await supabase.from('tag_requests').update({ 
+          status: 'error', 
+          error_msg: err.message, 
+          updated_at: new Date().toISOString() 
+        }).eq('id', req.id)
+        console.log(`[tagReq] ✅ Error guardado en Supabase`)
+        
+        console.error('╔═══════════════════════════════════════════════════════════╗')
+        console.error(`║          REQUEST ${req.id.slice(0, 8)}... FALLÓ ❌           ║`)
+        console.error('╚═══════════════════════════════════════════════════════════╝\n')
       }
     }
   } catch (err) {
-    console.error('[tagReq] poll error:', err.message)
+    console.error('[tagReq] ❌ Polling error:', err.message)
   }
 }
 

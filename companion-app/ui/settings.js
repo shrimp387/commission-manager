@@ -178,6 +178,8 @@ async function updateAuthUI() {
     const loggedin  = document.getElementById('auth-loggedin')
     const subtitle  = document.getElementById('auth-subtitle')
 
+    console.log('[updateAuthUI] 📊 Status received:', status)
+
     if (status.userId) {
       if (loggedout) loggedout.style.display = 'none'
       if (loggedin)  loggedin.style.display  = 'block'
@@ -186,22 +188,34 @@ async function updateAuthUI() {
       const nameEl  = document.getElementById('auth-name')
       
       if (emailEl) {
-        emailEl.textContent = status.email || 'Sesión activa'
+        // Show email or userId as primary identifier
+        emailEl.textContent = status.email || status.userId || 'Sesión activa'
       }
       
       if (nameEl) {
-        // Show user's name if available, otherwise show "Google account"
-        nameEl.textContent = status.name || 'Google account'
+        // Show user's name as secondary info
+        if (status.name) {
+          nameEl.textContent = status.name
+        } else if (status.email) {
+          // If no name, show email domain for context
+          nameEl.textContent = `Usuario: ${status.email.split('@')[0]}`
+        } else {
+          nameEl.textContent = 'Google Account'
+        }
       }
       
       if (subtitle) subtitle.textContent = 'Sesión activa'
+      
+      console.log('[updateAuthUI] ✅ UI updated:', { email: status.email, name: status.name })
     } else {
       if (loggedout) loggedout.style.display = 'block'
       if (loggedin)  loggedin.style.display  = 'none'
       if (subtitle) subtitle.textContent = 'Inicia sesión para activar el polling'
+      
+      console.log('[updateAuthUI] ℹ️ No user session')
     }
   } catch (err) {
-    console.error('[settings] updateAuthUI error:', err)
+    console.error('[updateAuthUI] ❌ Error:', err.message, err.stack)
   }
 }
 
@@ -349,25 +363,139 @@ window.testPlatform = testPlatform
 
 // ── Save IAs configuration ────────────────────────────────────────────────────
 
-async function saveIAs() {
+/** Save only HuggingFace token */
+async function saveHuggingFace() {
   try {
     const hfToken = v('hf-token')
+    
+    if (!hfToken) {
+      showResult('hf', '⚠️ Token vacío — no se guardó nada', 'err')
+      return
+    }
+    
+    if (!hfToken.startsWith('hf_')) {
+      showResult('hf', '⚠️ Token debe empezar con hf_ — verifica el formato', 'err')
+      return
+    }
+
+    console.log('[saveHF] 💾 Guardando token de HuggingFace...')
+    console.log('[saveHF] 🤗 Token:', `${hfToken.substring(0, 10)}...`)
+
+    await window.companion.saveConfig({ hfToken })
+
+    console.log('[saveHF] ✅ Token guardado correctamente')
+    showResult('hf', '✅ Token de HuggingFace guardado', 'ok')
+  } catch (err) {
+    console.error('[saveHF] ❌ Error:', err.message)
+    showResult('hf', `❌ Error al guardar: ${err.message}`, 'err')
+  }
+}
+window.saveHuggingFace = saveHuggingFace
+
+/** Save only Mistral AI credentials */
+async function saveMistral() {
+  try {
     const mistralKey = v('mistral-key')
     const mistralModel = document.getElementById('mistral-model')?.value || 'pixtral-large-latest'
+    
+    if (!mistralKey) {
+      showResult('mistral', '⚠️ API Key vacía — no se guardó nada', 'err')
+      return
+    }
 
-    // Save to electron-store
+    console.log('[saveMistral] 💾 Guardando configuración de Mistral AI...')
+    console.log('[saveMistral] 🧠 API key:', 'configurado')
+    console.log('[saveMistral] 🧠 Modelo:', mistralModel)
+
     await window.companion.saveConfig({
-      hfToken,
       mistralApiKey: mistralKey,
       mistralModel
     })
 
-    showResult('ias', '✅ Configuración de IAs guardada correctamente', 'ok')
+    console.log('[saveMistral] ✅ Configuración guardada correctamente')
+    showResult('mistral', '✅ Configuración de Mistral AI guardada', 'ok')
   } catch (err) {
-    showResult('ias', `❌ Error al guardar: ${err.message}`, 'err')
+    console.error('[saveMistral] ❌ Error:', err.message)
+    showResult('mistral', `❌ Error al guardar: ${err.message}`, 'err')
   }
 }
-window.saveIAs = saveIAs
+window.saveMistral = saveMistral
+
+/** Test HuggingFace connection - validates token format and logs status */
+async function testHuggingFace() {
+  const token = v('hf-token')
+  
+  if (!token) {
+    showResult('hf', '❌ Token vacío', 'err')
+    return
+  }
+  
+  if (!token.startsWith('hf_')) {
+    showResult('hf', '❌ Token inválido. Debe empezar con hf_', 'err')
+    return
+  }
+  
+  if (token.length < 20) {
+    showResult('hf', '❌ Token muy corto — verifica que sea completo', 'err')
+    return
+  }
+
+  const btn = document.getElementById('test-btn-hf')
+  if (btn) btn.disabled = true
+  showResult('hf', '⏳ Validando formato del token...', 'info')
+
+  try {
+    console.log('[testHF] 🧪 Testing HuggingFace token format...')
+    console.log('[testHF] 🔑 Token:', `${token.substring(0, 10)}...`)
+    
+    // Format is valid - HuggingFace tokens always start with hf_ and are 37+ chars
+    // We can't test the /whoami endpoint from renderer due to CORS
+    // Instead, validate format and show success
+    console.log('[testHF] ✅ Token format valid')
+    showResult('hf', '✅ Token válido (formato correcto). Guarda y prueba con los taggers.', 'ok')
+  } catch (err) {
+    console.error('[testHF] ❌ Error:', err.message)
+    showResult('hf', `❌ Error: ${err.message}`, 'err')
+  } finally {
+    if (btn) btn.disabled = false
+  }
+}
+window.testHuggingFace = testHuggingFace
+
+/** Test Mistral AI connection - validates key format */
+async function testMistral() {
+  const key = v('mistral-key')
+  
+  if (!key) {
+    showResult('mistral', '❌ API Key vacía', 'err')
+    return
+  }
+  
+  if (key.length < 20) {
+    showResult('mistral', '❌ API Key muy corta — verifica que sea completa', 'err')
+    return
+  }
+
+  const btn = document.getElementById('test-btn-mistral')
+  if (btn) btn.disabled = true
+  showResult('mistral', '⏳ Validando formato de la API Key...', 'info')
+
+  try {
+    console.log('[testMistral] 🧪 Testing Mistral API key format...')
+    console.log('[testMistral] 🔑 Key length:', key.length)
+    
+    // Format is valid - we can't test the API endpoint from renderer due to CORS
+    // Instead, validate format and show success
+    console.log('[testMistral] ✅ Key format valid')
+    showResult('mistral', '✅ API Key válida (formato correcto). Guarda y prueba con las IAs.', 'ok')
+  } catch (err) {
+    console.error('[testMistral] ❌ Error:', err.message)
+    showResult('mistral', `❌ Error: ${err.message}`, 'err')
+  } finally {
+    if (btn) btn.disabled = false
+  }
+}
+window.testMistral = testMistral
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

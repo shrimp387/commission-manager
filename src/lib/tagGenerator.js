@@ -2,12 +2,17 @@
  * tagGenerator.js — Generación automática de tags estilo e621.
  *
  * Soporta múltiples backends:
- * - e621: Poofy1/e621-tagger (específico para furry art)
- * - pawfect: P.A.W.F.E.C.T-Alpha (entrenado con FurAffinity)
- * - mistral: Mistral Pixtral (requiere plan de pago)
+ * - e621: zerauskii/e621-tagger-jtp via Companion App (flujo principal)
+ * - pawfect: P.A.W.F.E.C.T-Alpha via Companion App (flujo principal)
+ * - wd: WD-Tagger via Companion App (flujo principal)
+ * - mistral: Mistral Pixtral (requiere plan de pago, directo desde browser)
+ *
+ * Flujo principal: Vercel → Supabase tag_requests → Companion App → HuggingFace
+ * Fallback:        Vercel → HuggingFace directo desde browser (si companion no responde)
  */
 import { getConfig } from '../store/appConfig.js'
-import { generateTagsE621, generateTagsPAWFECT } from './e621Tagger.js'
+import { generateTagsFromBrowser } from './huggingFaceClient.js'
+import { requestTagsFromCompanion } from './tagRequestsDb.js'
 
 const MAX_TAGS = 200
 
@@ -36,68 +41,27 @@ export function identifyHighResAttachment(attachments) {
   )
 }
 
-// ── WD-Tagger via Supabase tag_requests ───────────────────────────────────────
+// ── Generación via Companion App (flujo principal) ──────────────────────────
+// Companion App corre en Node.js → sin CORS, sin rate limits del browser
+// Si la companion no está abierta, cae al fallback de browser
 
-const R2_WORKER_URL = 'https://commission-manager-r2.commission-manager-studio.workers.dev'
-const WD_TIMEOUT_MS = 45_000
-const WD_THRESHOLD  = 0.35
-
-async function generateTagsWDTagger(imageUrl, onStatus) {
-  // ── Método primario: via tag_requests en Supabase ─────────────────────────
-  // La companion app corre en la PC del artista, hace polling de tag_requests,
-  // genera los tags con WD-Tagger localmente (sin Mixed Content ni CF 530),
-  // y guarda el resultado en Supabase.
+async function generateTagsViaCompanion(imageUrl, taggerType, hfToken, onStatus) {
+  console.log(`[tagGenerator] 🖥️  Intentando via Companion App (${taggerType})...`)
   try {
-    const { requestTagsFromCompanion } = await import('./tagRequestsDb.js')
-    return await requestTagsFromCompanion(imageUrl, 'wd', onStatus)
+    const tags = await requestTagsFromCompanion(imageUrl, taggerType, onStatus)
+    console.log(`[tagGenerator] ✅ Companion App respondió: ${tags.length} tags`)
+    return tags
   } catch (err) {
-    console.warn('[WD-Tagger] companion via Supabase falló:', err.message)
-    // Timeout = companion no disponible o no respondió
-    if (err.message.includes('Timeout') || err.message.includes('Companion') || err.message.includes('abre')) {
-      throw err
+    // Si es timeout (companion no abierta), caer al browser
+    if (err.message.includes('Timeout') || err.message.includes('autenticado')) {
+      console.warn(`[tagGenerator] ⚠️  Companion no disponible: ${err.message}`)
+      console.log(`[tagGenerator] 🌐 Fallback: llamando HuggingFace desde browser...`)
+      onStatus?.('Companion App no disponible, generando desde browser...')
+      return generateTagsFromBrowser(imageUrl, taggerType, hfToken, onStatus)
     }
-    // Otro error — intentar fallback
-    onStatus?.('Companion no disponible, intentando servidor alternativo...')
-  }
-
-  // ── Fallback: Worker de Cloudflare → HuggingFace ─────────────────────────
-  let authToken = ''
-  try {
-    const session = JSON.parse(
-      localStorage.getItem('sb-yhlhsqhlnzgrhagoeosp-auth-token') || '{}'
-    )
-    authToken = session?.access_token || ''
-  } catch {}
-
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), WD_TIMEOUT_MS)
-
-  try {
-    const res = await fetch(`${R2_WORKER_URL}/tag`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-      },
-      body: JSON.stringify({ imageUrl, threshold: WD_THRESHOLD }),
-    })
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      throw new Error(body.error || `Worker HTTP ${res.status}`)
-    }
-
-    const data = await res.json()
-    if (!data.ok || !Array.isArray(data.tags)) throw new Error('Respuesta inesperada del worker')
-    return data.tags
-
-  } catch (err) {
-    clearTimeout(timer)
-    if (err.name === 'AbortError') throw new Error('Timeout al generar tags. Intenta de nuevo.')
-    throw new Error(`Para generar tags, abre la Companion App. (${err.message})`)
-  } finally {
-    clearTimeout(timer)
+    // Cualquier otro error (Supabase, etc.) también cae al browser
+    console.warn(`[tagGenerator] ⚠️  Error companion: ${err.message} — usando browser`)
+    return generateTagsFromBrowser(imageUrl, taggerType, hfToken, onStatus)
   }
 }
 
@@ -176,22 +140,26 @@ export async function generateTags(imageUrl, backend, onStatus) {
   const cfg = getConfig()
   const resolvedBackend = backend ?? cfg.tagBackend ?? 'e621'
   
-  // Get HuggingFace token from config (optional)
+  // Get HuggingFace token from config (used as fallback desde browser)
   const hfToken = cfg.hfToken || ''
   
   console.log('[tagGenerator] 🎯 Backend:', resolvedBackend)
   console.log('[tagGenerator] 🔑 HF Token:', hfToken ? 'present' : 'not set')
+  console.log('[tagGenerator] 🖥️  Método: Companion App → fallback browser')
   
   if (resolvedBackend === 'mistral') {
+    // Mistral siempre directo desde browser (no hay endpoint en companion)
     return generateTagsMistral(imageUrl)
   }
   
-  if (resolvedBackend === 'pawfect') {
-    return generateTagsPAWFECT(imageUrl, hfToken, onStatus)
+  // Para e621, pawfect, wd: intentar via companion app primero
+  if (['e621', 'pawfect', 'wd'].includes(resolvedBackend)) {
+    return generateTagsViaCompanion(imageUrl, resolvedBackend, hfToken, onStatus)
   }
   
-  // Default: e621 (Poofy1)
-  return generateTagsE621(imageUrl, hfToken, onStatus)
+  // Default: e621 via companion
+  console.log('[tagGenerator] 🐾 Backend no reconocido, usando e621 via companion...')
+  return generateTagsViaCompanion(imageUrl, 'e621', hfToken, onStatus)
 }
 
 export function parseTags(text) {

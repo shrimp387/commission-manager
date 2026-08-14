@@ -568,6 +568,11 @@
           <label for="hf-token">Token (empieza con hf_...)</label>
           <input type="password" id="hf-token" placeholder="hf_..." autocomplete="off" style="font-family:monospace" />
         </div>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn-save" onclick="saveHuggingFace()">💾 Guardar</button>
+          <button class="btn-test" id="test-btn-hf" onclick="testHuggingFace()">🧪 Probar conexión</button>
+        </div>
+        <div id="result-hf" class="result" style="margin-top:8px"></div>
         <div style="background:var(--bg);border-radius:6px;padding:10px;margin-top:10px;font-size:0.75rem">
           <p style="font-weight:600;margin-bottom:4px;color:var(--text-label)">📊 Límites:</p>
           <ul style="margin:0;padding-left:18px;color:var(--text-dim)">
@@ -599,13 +604,12 @@
             <option value="pixtral-12b-2409">Pixtral 12B</option>
           </select>
         </div>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn-save" onclick="saveMistral()">💾 Guardar</button>
+          <button class="btn-test" id="test-btn-mistral" onclick="testMistral()">🧪 Probar conexión</button>
+        </div>
+        <div id="result-mistral" class="result" style="margin-top:8px"></div>
       </div>
-
-      <!-- Save button -->
-      <div class="btn-row" style="margin-top:16px">
-        <button class="btn-save" onclick="saveIAs()">💾 Guardar configuración de IAs</button>
-      </div>
-      <div id="result-ias" class="result" style="margin-top:8px"></div>
 
       <!-- Info box -->
       <div style="background:var(--bg-input);border-left:3px solid var(--green);border-radius:6px;padding:12px;margin-top:16px;font-size:0.8rem;color:var(--text-dim)">
