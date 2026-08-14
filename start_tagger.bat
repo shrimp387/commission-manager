@@ -33,7 +33,6 @@ if not exist "venv" (
         exit /b 1
     )
     echo  [OK] Entorno virtual creado.
-    echo.
 )
 
 :: Activar venv
@@ -45,51 +44,58 @@ if errorlevel 1 (
 )
 echo  [OK] Entorno virtual activado.
 
-:: Verificar dependencias
-python -c "import timm, safetensors, torch, torchvision, PIL" >nul 2>&1
-if errorlevel 1 (
-    echo.
-    echo  [SETUP] Instalando dependencias (primera vez tarda 5-15 min)...
-    echo.
-    echo  [SETUP] Instalando PyTorch con CUDA...
-    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121 -q
-    python -c "import torch" >nul 2>&1
-    if errorlevel 1 (
-        echo  [SETUP] CUDA no disponible. Instalando PyTorch CPU...
-        pip install torch torchvision -q
-    )
-    echo  [SETUP] Instalando timm, safetensors, pillow...
-    pip install timm safetensors pillow -q
-    python -c "import timm, safetensors, torch, torchvision, PIL" >nul 2>&1
-    if errorlevel 1 (
-        echo  [ERROR] Error instalando dependencias.
-        pause
-        exit /b 1
-    )
-    echo  [OK] Dependencias instaladas.
-    echo.
-) else (
+:: Verificar dependencias usando script externo
+python check_deps.py > deps_check.tmp 2>&1
+set /p DEPS_RESULT=<deps_check.tmp
+del deps_check.tmp >nul 2>&1
+
+if "%DEPS_RESULT%"=="OK" (
     echo  [OK] Dependencias ya instaladas.
+    goto MODEL_CHECK
 )
 
+echo.
+echo  [SETUP] Instalando dependencias (primera vez tarda 5-15 min)...
+echo.
+echo  [SETUP] Instalando PyTorch con CUDA 12.1 (GPU NVIDIA)...
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121 -q
+if errorlevel 1 (
+    echo  [SETUP] Intentando PyTorch CPU...
+    pip install torch torchvision -q
+)
+echo  [SETUP] Instalando timm, safetensors, pillow...
+pip install timm safetensors pillow -q
+
+python check_deps.py > deps_check.tmp 2>&1
+set /p DEPS_RESULT2=<deps_check.tmp
+del deps_check.tmp >nul 2>&1
+if not "%DEPS_RESULT2%"=="OK" (
+    echo  [ERROR] Fallo instalando dependencias. Revisa tu internet.
+    echo  Detalle: %DEPS_RESULT2%
+    pause
+    exit /b 1
+)
+echo  [OK] Dependencias instaladas.
+
+:MODEL_CHECK
 :: Verificar modelo
 if not exist "JTP_PILOT2-e3-vit_so400m_patch14_siglip_384.safetensors" (
     echo.
     echo  [ERROR] Modelo no encontrado:
     echo    JTP_PILOT2-e3-vit_so400m_patch14_siglip_384.safetensors
     echo.
-    echo  El archivo debe estar en la misma carpeta que este .bat
+    echo  El archivo debe estar en esta misma carpeta.
     pause
     exit /b 1
 )
 
 echo  [OK] Modelo encontrado.
 echo.
-echo  [INFO] Cargando modelo (10-30 segundos)...
+echo  [INFO] Cargando modelo en memoria (10-30 segundos)...
 echo.
 echo  ===================================================
 echo   Servidor en: http://localhost:5621
-echo   Deja esta ventana abierta.
+echo   Deja esta ventana abierta mientras usas la app.
 echo   Para detener: Ctrl+C
 echo  ===================================================
 echo.
