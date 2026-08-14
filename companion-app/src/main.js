@@ -66,12 +66,6 @@ app.whenReady().then(async () => {
   startOAuthCallback()   // listen for Google OAuth redirect
   startTagServer()       // local WD-Tagger endpoint for web app
 
-  // ── HuggingFace Health Check ────────────────────────────────────────
-  const { testHuggingFaceConnection, printHealthCheckSummary } = require('./hfHealthCheck')
-  const hfToken = store.get('hfToken') || ''
-  const hfStatus = await testHuggingFaceConnection(hfToken)
-  printHealthCheckSummary(hfStatus)
-
   // ── Start Polling ───────────────────────────────────────────────────
   startPolling()
 
@@ -282,8 +276,7 @@ function startPolling() {
   poll() // run immediately on start
 }
 
-const { generateTagsWDTagger } = require('./wdTagger')
-const { generateTagsE621, generateTagsPAWFECT } = require('./e621Tagger')
+const { generateTagsLocalFromUrl } = require('./e621TaggerLocal')
 
 // ── Tag requests polling ──────────────────────────────────────────────────────
 async function processTagRequests() {
@@ -331,13 +324,7 @@ async function processTagRequests() {
       console.log(`[tagReq] 🖼️  Imagen: ${req.image_url}`)
       console.log(`[tagReq] 👤 User: ${userId.slice(0, 8)}...`)
       
-      const hfToken = store.get('hfToken') || ''
-      if (hfToken) {
-        console.log(`[tagReq] 🔑 HF Token: ${hfToken.slice(0, 10)}... (CONFIGURADO)`)
-      } else {
-        console.log(`[tagReq] ⚠️  HF Token: NO CONFIGURADO (rate limiting activo)`)
-      }
-      console.log('─────────────────────────────────────────────────────────────')
+      // HF token ya no se usa — el tagger es local
       
       // Marcar como processing
       console.log(`[tagReq] 📝 Actualizando status → 'processing' en Supabase...`)
@@ -353,22 +340,10 @@ async function processTagRequests() {
         let tags
         const startTime = Date.now()
         
-        // Route to appropriate tagger based on tagger_type
-        switch (taggerType) {
-          case 'e621':
-            console.log('[tagReq] 🤖 → Usando E621-Tagger (HuggingFace: Poofy1/e621-tagger)')
-            tags = await generateTagsE621(req.image_url, hfToken)
-            break
-          case 'pawfect':
-            console.log('[tagReq] 🤖 → Usando P.A.W.F.E.C.T (HuggingFace: lodestones/P.A.W.F.E.C.T-Alpha)')
-            tags = await generateTagsPAWFECT(req.image_url, hfToken)
-            break
-          case 'wd':
-          default:
-            console.log('[tagReq] 🤖 → Usando WD-Tagger (HuggingFace: SmilingWolf/wd-vit-tagger-v3)')
-            tags = await generateTagsWDTagger(req.image_url, hfToken)
-            break
-        }
+        // Todos los taggers usan JTP local (puerto 5621)
+        // Para iniciar: cd joint-tagger/JTP_PILOT2 && python api_server.py
+        console.log('[tagReq] 🤖 → Usando JTP PILOT2 local (http://localhost:5621)')
+        tags = await generateTagsLocalFromUrl(req.image_url)
         
         const duration = Date.now() - startTime
         
@@ -461,10 +436,9 @@ async function processJob(job) {
   let jobTags = job.tags ?? []
   if (jobTags.length === 0 && job.image_url) {
     try {
-      console.log('[job] No tags found — generating with WD-Tagger...')
-      const hfToken = store.get('hfToken') || ''
-      jobTags = await generateTagsWDTagger(job.image_url, hfToken)
-      console.log(`[job] WD-Tagger generated ${jobTags.length} tags`)
+      console.log('[job] No tags found — generating with JTP local...')
+      jobTags = await generateTagsLocalFromUrl(job.image_url)
+      console.log(`[job] JTP generated ${jobTags.length} tags`)
       // Save generated tags back to Supabase so the web app sees them
       await supabase
         .from('publish_jobs')
@@ -532,8 +506,7 @@ function startTagServer() {
             res.end(JSON.stringify({ error: 'imageUrl required' }))
             return
           }
-          const hfToken = store.get('hfToken') || ''
-          const tags = await generateTagsWDTagger(imageUrl, hfToken)
+          const tags = await generateTagsLocalFromUrl(imageUrl)
           res.writeHead(200, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ ok: true, tags }))
         } catch (err) {

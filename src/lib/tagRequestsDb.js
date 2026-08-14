@@ -10,7 +10,7 @@ import { supabase } from './supabase.js'
 import { getCurrentUserId } from './db.js'
 
 const POLL_INTERVAL_MS = 2000   // cada 2s
-const MAX_WAIT_MS      = 30_000 // 30s máximo — si la companion no responde, cae al browser
+const MAX_WAIT_MS      = 120_000 // 120s — JTP local puede tardar en procesar
 
 /**
  * Solicita tags para una imagen via la companion app.
@@ -142,5 +142,5 @@ export async function requestTagsFromCompanion(imageUrl, taggerType = 'wd', onSt
   console.error(`[tagRequestsDb] 🧹 Limpiando request de Supabase...`)
   
   supabase.from('tag_requests').delete().eq('id', requestId).then(() => {})
-  throw new Error(`Timeout: La Companion App no respondió en 90 segundos. ¿Está abierta?`)
+  throw new Error(`Timeout: La Companion App no respondió en 120 segundos. ¿Está abierta? ¿Está corriendo api_server.py?`)
 }

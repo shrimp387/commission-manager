@@ -1,22 +1,13 @@
 /**
- * tagGenerator.js — Generación automática de tags estilo e621.
+ * tagGenerator.js — Generación de tags via Companion App + JTP local
  *
- * Soporta múltiples backends:
- * - e621: zerauskii/e621-tagger-jtp via Companion App (flujo principal)
- * - pawfect: P.A.W.F.E.C.T-Alpha via Companion App (flujo principal)
- * - wd: WD-Tagger via Companion App (flujo principal)
- * - mistral: Mistral Pixtral (requiere plan de pago, directo desde browser)
- *
- * Flujo principal: Vercel → Supabase tag_requests → Companion App → HuggingFace
- * Fallback:        Vercel → HuggingFace directo desde browser (si companion no responde)
+ * Flujo: Vercel → Supabase tag_requests → Companion App → JTP (localhost:5621)
+ * NO usa HuggingFace. El modelo corre localmente en la PC del artista.
  */
 import { getConfig } from '../store/appConfig.js'
-import { generateTagsFromBrowser } from './huggingFaceClient.js'
 import { requestTagsFromCompanion } from './tagRequestsDb.js'
 
 const MAX_TAGS = 200
-
-// ── Error ─────────────────────────────────────────────────────────────────────
 
 export class ConfigError extends Error {
   constructor(message) {
@@ -24,8 +15,6 @@ export class ConfigError extends Error {
     this.name = 'ConfigError'
   }
 }
-
-// ── Core ──────────────────────────────────────────────────────────────────────
 
 export function normalizeTag(s) {
   if (typeof s !== 'string') return ''
@@ -41,32 +30,7 @@ export function identifyHighResAttachment(attachments) {
   )
 }
 
-// ── Generación via Companion App (flujo principal) ──────────────────────────
-// Companion App corre en Node.js → sin CORS, sin rate limits del browser
-// Si la companion no está abierta, cae al fallback de browser
-
-async function generateTagsViaCompanion(imageUrl, taggerType, hfToken, onStatus) {
-  console.log(`[tagGenerator] 🖥️  Intentando via Companion App (${taggerType})...`)
-  try {
-    const tags = await requestTagsFromCompanion(imageUrl, taggerType, onStatus)
-    console.log(`[tagGenerator] ✅ Companion App respondió: ${tags.length} tags`)
-    return tags
-  } catch (err) {
-    // Si es timeout (companion no abierta), caer al browser
-    if (err.message.includes('Timeout') || err.message.includes('autenticado')) {
-      console.warn(`[tagGenerator] ⚠️  Companion no disponible: ${err.message}`)
-      console.log(`[tagGenerator] 🌐 Fallback: llamando HuggingFace desde browser...`)
-      onStatus?.('Companion App no disponible, generando desde browser...')
-      return generateTagsFromBrowser(imageUrl, taggerType, hfToken, onStatus)
-    }
-    // Cualquier otro error (Supabase, etc.) también cae al browser
-    console.warn(`[tagGenerator] ⚠️  Error companion: ${err.message} — usando browser`)
-    return generateTagsFromBrowser(imageUrl, taggerType, hfToken, onStatus)
-  }
-}
-
-// ── Mistral Vision ────────────────────────────────────────────────────────────
-
+// ── Mistral Vision (único backend que NO usa companion) ───────────────────────
 const MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions'
 const MISTRAL_TIMEOUT_MS = 20_000
 const VISION_MODELS = new Set(['pixtral-12b-2409', 'pixtral-large-latest'])
@@ -80,18 +44,16 @@ Include tags from these categories:
 - body: physical features (e.g. fur, scales, tail, ears, wings, claws, paws, mane)
 - character: character names if recognizable
 - gender: male, female, intersex, ambiguous_gender
-- anatomy: body parts visible — be explicit and accurate
-- sexual_acts: any sexual acts depicted — be explicit
+- anatomy: body parts visible
 - clothing: clothed, partially_clothed, nude, naked
 - count: solo, duo, trio, group
-- pose: standing, lying, sitting, on_all_fours, spread_legs, etc.
-- expression: smile, blush, open_mouth, tongue_out, moaning, etc.
+- pose: standing, lying, sitting, etc.
+- expression: smile, blush, open_mouth, etc.
 - setting: indoor, outdoor, bedroom, forest, etc.
-- art_style: digital_art, traditional_art, sketch, watercolor, 3d_render, etc.
-- quality: hi_res, absurd_res, detailed, shading, colored, etc.
-- rating: rating:e (explicit), rating:q (questionable), rating:s (safe)
+- art_style: digital_art, traditional_art, sketch, etc.
+- quality: hi_res, detailed, shading, colored, etc.
 
-Rules: underscores instead of spaces, lowercase, 50-120 tags, no censoring NSFW.
+Rules: underscores instead of spaces, lowercase, 50-120 tags.
 Format: tag1, tag2, tag3, ...`
 
 async function generateTagsMistral(imageUrl) {
@@ -139,27 +101,21 @@ async function generateTagsMistral(imageUrl) {
 export async function generateTags(imageUrl, backend, onStatus) {
   const cfg = getConfig()
   const resolvedBackend = backend ?? cfg.tagBackend ?? 'e621'
-  
-  // Get HuggingFace token from config (used as fallback desde browser)
-  const hfToken = cfg.hfToken || ''
-  
+
   console.log('[tagGenerator] 🎯 Backend:', resolvedBackend)
-  console.log('[tagGenerator] 🔑 HF Token:', hfToken ? 'present' : 'not set')
-  console.log('[tagGenerator] 🖥️  Método: Companion App → fallback browser')
-  
+  console.log('[tagGenerator] 🖥️  Método: Companion App → JTP local (localhost:5621)')
+
   if (resolvedBackend === 'mistral') {
-    // Mistral siempre directo desde browser (no hay endpoint en companion)
     return generateTagsMistral(imageUrl)
   }
-  
-  // Para e621, pawfect, wd: intentar via companion app primero
-  if (['e621', 'pawfect', 'wd'].includes(resolvedBackend)) {
-    return generateTagsViaCompanion(imageUrl, resolvedBackend, hfToken, onStatus)
-  }
-  
-  // Default: e621 via companion
-  console.log('[tagGenerator] 🐾 Backend no reconocido, usando e621 via companion...')
-  return generateTagsViaCompanion(imageUrl, 'e621', hfToken, onStatus)
+
+  // Todos los demás backends van via companion app
+  // La companion app llama al servidor JTP local en puerto 5621
+  const taggerType = ['e621', 'pawfect', 'wd'].includes(resolvedBackend) ? resolvedBackend : 'e621'
+  console.log(`[tagGenerator] 📡 Enviando request a companion app (tagger: ${taggerType})...`)
+  onStatus?.(`Enviando a Companion App para generar tags con JTP...`)
+
+  return requestTagsFromCompanion(imageUrl, taggerType, onStatus)
 }
 
 export function parseTags(text) {
