@@ -1,136 +1,124 @@
-import fetch from 'node-fetch';
-import FormData from 'form-data';
-
-const TAGGER_LOCAL_URL = 'http://localhost:5000';
+'use strict'
 
 /**
- * Verifica si el servidor e621-tagger local está corriendo
- * @returns {Promise<boolean>} True si el servidor responde
+ * e621TaggerLocal.js — Cliente para el servidor JTP PILOT2 local
+ *
+ * El modelo JTP corre en la PC del artista via api_server.py
+ * Endpoint: http://localhost:5621/predict
+ *
+ * Para iniciar el servidor:
+ *   cd joint-tagger/JTP_PILOT2
+ *   python api_server.py
  */
-export async function checkE621TaggerStatus() {
+
+const JTP_URL = 'http://127.0.0.1:5621'
+const TIMEOUT_MS = 60_000  // 60s — la primera inferencia puede tardar
+
+/**
+ * Verifica si el servidor JTP local está corriendo.
+ * @returns {Promise<boolean>}
+ */
+async function checkJTPStatus() {
   try {
-    const response = await fetch(TAGGER_LOCAL_URL, {
-      method: 'GET',
-      signal: AbortSignal.timeout(5000)
-    });
-    return response.ok;
-  } catch (error) {
-    console.log('[e621TaggerLocal] ⚠️ Servidor no disponible:', error.message);
-    return false;
+    const res = await fetch(`${JTP_URL}/health`, {
+      signal: AbortSignal.timeout(3000)
+    })
+    if (res.ok) {
+      const data = await res.json()
+      console.log(`[localTagger] ✅ Servidor JTP online: ${data.model}`)
+      return true
+    }
+    return false
+  } catch {
+    return false
   }
 }
 
 /**
- * Genera tags usando el tagger local desde un buffer de imagen
- * @param {Buffer} imageBuffer - Buffer de la imagen
- * @param {string} filename - Nombre del archivo (opcional, default: 'image.png')
- * @returns {Promise<string[]>} Array de tags normalizados
+ * Genera tags enviando un buffer de imagen al servidor JTP local.
+ *
+ * @param {Buffer} imageBuffer
+ * @param {number} threshold - default 0.2
+ * @returns {Promise<string[]>}
  */
-export async function generateTagsE621Local(imageBuffer, filename = 'image.png') {
-  console.log('[e621TaggerLocal] 🏷️ Generando tags con tagger local...');
-  console.log('[e621TaggerLocal] 📊 Tamaño de imagen:', (imageBuffer.length / 1024).toFixed(2), 'KB');
-  
-  const formData = new FormData();
-  formData.append('image', imageBuffer, {
-    filename: filename,
-    contentType: 'image/png'
-  });
+async function generateTagsLocal(imageBuffer, threshold = 0.2) {
+  console.log(`[localTagger] 📤 Enviando imagen al servidor JTP (${imageBuffer.length} bytes)...`)
+
+  const FormData = require('form-data')
+  const form = new FormData()
+  form.append('image', imageBuffer, { filename: 'image.png', contentType: 'image/png' })
+  form.append('threshold', String(threshold))
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // 30 segundos
-
-    const response = await fetch(`${TAGGER_LOCAL_URL}/upload`, {
+    const res = await fetch(`${JTP_URL}/predict`, {
       method: 'POST',
-      body: formData,
-      headers: formData.getHeaders(),
-      signal: controller.signal
-    });
+      body: form,
+      headers: form.getHeaders(),
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
 
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(`HTTP ${res.status}: ${err.error || ''}`)
     }
 
-    const data = await response.json();
-    
-    // El modelo retorna tags separados por comas
-    const tags = data.prediction
-      .split(',')
-      .map(tag => tag.trim())
-      .filter(tag => tag.length > 0);
+    const data = await res.json()
+    console.log(`[localTagger] ✅ Tags generados: ${data.count}`)
+    return data.tags
 
-    console.log('[e621TaggerLocal] ✅ Tags generados:', tags.length);
-    console.log('[e621TaggerLocal] 🏷️ Primeros 10 tags:', tags.slice(0, 10).join(', '));
-    
-    return tags;
-    
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      console.error('[e621TaggerLocal] ⏱️ Timeout después de 30 segundos');
-      throw new Error('Timeout al generar tags con tagger local (30s)');
+  } catch (err) {
+    clearTimeout(timer)
+    if (err.name === 'AbortError') {
+      throw new Error(`Timeout esperando al servidor JTP (${TIMEOUT_MS / 1000}s)`)
     }
-    console.error('[e621TaggerLocal] ❌ Error:', error.message);
-    throw new Error(`Error al generar tags con tagger local: ${error.message}`);
+    throw err
   }
 }
 
 /**
- * Descarga imagen desde URL y genera tags en un solo paso
- * @param {string} imageUrl - URL de la imagen
- * @returns {Promise<string[]>} Array de tags normalizados
+ * Descarga imagen desde URL y genera tags con JTP local.
+ *
+ * @param {string} imageUrl
+ * @param {number} threshold
+ * @returns {Promise<string[]>}
  */
-export async function generateTagsE621LocalFromUrl(imageUrl) {
-  console.log('[e621TaggerLocal] 📥 Descargando imagen:', imageUrl);
-  
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+async function generateTagsLocalFromUrl(imageUrl, threshold = 0.2) {
+  console.log(`[localTagger] ━━━━ JTP LOCAL TAGGER ━━━━`)
+  console.log(`[localTagger] 🖼️  URL: ${imageUrl}`)
+  console.log(`[localTagger] 🎯 Threshold: ${threshold}`)
 
-    const imageResponse = await fetch(imageUrl, { 
-      signal: controller.signal 
-    });
-    
-    clearTimeout(timeout);
-
-    if (!imageResponse.ok) {
-      throw new Error(`Error al descargar imagen: HTTP ${imageResponse.status}`);
-    }
-    
-    const imageBuffer = await imageResponse.buffer();
-    console.log('[e621TaggerLocal] ✅ Imagen descargada:', (imageBuffer.length / 1024).toFixed(2), 'KB');
-    
-    // Generar tags
-    return await generateTagsE621Local(imageBuffer);
-    
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      throw new Error('Timeout al descargar imagen (30s)');
-    }
-    throw error;
+  // Verificar que el servidor esté corriendo
+  const online = await checkJTPStatus()
+  if (!online) {
+    throw new Error(
+      'El servidor JTP local no está corriendo. ' +
+      'Inícialo con: cd joint-tagger/JTP_PILOT2 && python api_server.py'
+    )
   }
+
+  // Descargar imagen
+  console.log(`[localTagger] 📥 Descargando imagen...`)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 60_000)
+
+  let imageBuffer
+  try {
+    const res = await fetch(imageUrl, { signal: controller.signal })
+    clearTimeout(timer)
+    if (!res.ok) throw new Error(`HTTP ${res.status} descargando imagen`)
+    imageBuffer = Buffer.from(await res.arrayBuffer())
+    console.log(`[localTagger] ✅ Imagen: ${imageBuffer.length} bytes`)
+  } catch (err) {
+    clearTimeout(timer)
+    if (err.name === 'AbortError') throw new Error('Timeout descargando imagen (60s)')
+    throw err
+  }
+
+  return generateTagsLocal(imageBuffer, threshold)
 }
 
-/**
- * Obtiene información del servidor e621-tagger local
- * @returns {Promise<Object>} Información del servidor
- */
-export async function getE621TaggerInfo() {
-  try {
-    const isOnline = await checkE621TaggerStatus();
-    return {
-      online: isOnline,
-      url: TAGGER_LOCAL_URL,
-      model: 'e621-tagger (poofy38/e621-tagger-01)',
-      description: 'Modelo local especializado en furry art'
-    };
-  } catch (error) {
-    return {
-      online: false,
-      url: TAGGER_LOCAL_URL,
-      error: error.message
-    };
-  }
-}
+module.exports = { generateTagsLocalFromUrl, checkJTPStatus }
